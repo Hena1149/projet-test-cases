@@ -433,17 +433,22 @@ def load_nlp_model():
         return None
 
 def extract_text(uploaded_file):
-    """Extrait le texte depuis un fichier uploadé"""
+    """Extrait le texte depuis PDF ou DOCX"""
     try:
         file_bytes = uploaded_file.getvalue()
         
         if uploaded_file.type == "application/pdf":
             with BytesIO(file_bytes) as f:
-                return pdfminer.high_level.extract_text(f)
+                text = pdfminer.high_level.extract_text(f)
         elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             with BytesIO(file_bytes) as f:
                 doc = docx.Document(f)
-                return "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+        else:
+            raise ValueError("Format non supporté")
+            
+        return text if text and text.strip() else None
+        
     except Exception as e:
         st.error(f"Erreur d'extraction : {str(e)}")
         return None
