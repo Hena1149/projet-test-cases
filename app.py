@@ -153,8 +153,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Configuration de base
-st.set_page_config(page_title="Analyse de Documents", layout="wide")
-st.title("📑 Analyse de Documents Professionnels")
+st.set_page_config(page_title="Cas de Test", layout="wide")
+st.title("📑 Génération automatique des cas de test à partir du CDC")
 
 # ----------------------------
 # PARTIE 1: Extraction du texte
