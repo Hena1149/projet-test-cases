@@ -317,10 +317,65 @@ def generate_wordcloud(freq_dict, width=800, height=400, background_color="white
     return fig
 
 # ----------------------------
+# NOUVELLES FONCTIONS POUR L'EXTRACTION DE RÈGLES
+# ----------------------------
+@st.cache_resource
+def load_spacy_model():
+    """Charge le modèle spaCy une seule fois"""
+    try:
+        nlp = spacy.load("fr_core_news_md")
+        return nlp
+    except Exception as e:
+        st.error(f"Erreur de chargement du modèle NLP: {str(e)}")
+        return None
+
+def extract_business_rules(text, nlp_model):
+    """Nouvelle fonction optimisée pour l'extraction de règles"""
+    # Extraction par motifs regex
+    patterns = [
+        r"(Si|Lorsqu['’]|Quand|Dès que|En cas de).*?(alors|doit|devra|est tenu de|nécessite|implique|entraîne|peut).*?\.",
+        r"(L['’]utilisateur|Le client|Le système).*?(doit|devra|peut|est tenu de|ne peut pas).*?\."
+    ]
+    
+    rules = set()
+    for pattern in patterns:
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+        rules.update(match.group().strip() for match in matches)
+    
+    # Extraction NLP si modèle disponible
+    if nlp_model:
+        doc = nlp_model(text)
+        for sent in doc.sents:
+            if any(keyword in sent.text.lower() for keyword in ["doit", "obligatoire", "interdit", "si ", "alors"]):
+                rules.add(sent.text.strip())
+    
+    return sorted([clean_rule(rule) for rule in rules if len(rule.split()) > 3], key=len, reverse=True)
+
+def clean_rule(rule_text):
+    """Nettoie une règle de gestion"""
+    rule_text = re.sub(r"\s+", " ", rule_text).strip()
+    return rule_text if rule_text.endswith(".") else f"{rule_text}."
+
+def create_rule_docx(rules):
+    """Crée un document Word des règles"""
+    doc = docx.Document()
+    doc.add_heading('Règles Métier Extraites', level=1)
+    
+    for i, rule in enumerate(rules, 1):
+        doc.add_paragraph(f"{i}. {rule}", style='ListBullet')
+    
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# ----------------------------
 # INTERFACE UTILISATEUR
 # ----------------------------
 st.title("📑 Génération automatique des cas de test à partir du CDC")
-tab1, tab2, tab3 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud"])
+# Chargement du modèle NLP
+nlp = load_spacy_model()
+tab1, tab2, tab3, tab4 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud", "📑 Règles Métier"])
 
 with tab1:
     st.header("Extraction de Texte")
@@ -387,6 +442,44 @@ with tab3:
                 file_name="wordcloud.png",
                 mime="image/png"
             )
+
+    with tab4:
+        st.header("Extraction des Règles Métier")
+        st.warning("ℹ️ Vous devez d'abord extraire du texte dans l'onglet précédent")
+        
+        if 'extracted_text' in st.session_state and nlp:
+            if st.button("Analyser les règles", type="primary"):
+                with st.spinner("Recherche des règles métier..."):
+                    rules = extract_business_rules(st.session_state.extracted_text, nlp)
+                    
+                    if rules:
+                        st.session_state.rules = rules
+                        st.success(f"{len(rules)} règles identifiées !")
+                        
+                        # Affichage avec pagination
+                        page_size = 10
+                        total_pages = (len(rules) + page_size - 1) // page_size
+                        page = st.number_input("Page", 1, total_pages, 1)
+                        
+                        start_idx = (page - 1) * page_size
+                        end_idx = min(start_idx + page_size, len(rules))
+                        
+                        for i in range(start_idx, end_idx):
+                            st.markdown(f"**Règle {i+1}**")
+                            st.info(rules[i])
+                        
+                        # Téléchargement
+                        docx_file = create_rule_docx(rules)
+                        st.download_button(
+                            "💾 Exporter les règles (DOCX)",
+                            data=docx_file,
+                            file_name="regles_metier.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+                    else:
+                        st.warning("Aucune règle métier détectée")
+        elif not nlp:
+            st.error("Le modèle NLP n'est pas disponible")
 
 # ----------------------------
 # PIED DE PAGE
