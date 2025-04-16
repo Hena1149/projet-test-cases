@@ -61,3 +61,83 @@ else:
 
 st.markdown("---")
 st.caption("Appuyez sur 'R' pour rafraîchir l'application")
+
+import pandas as pd
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+
+# Fonction de nettoyage (optimisée pour Streamlit)
+def nettoyer_texte(text, nlp, stopwords_fr, mots_inutiles):
+    """Version simplifiée pour Streamlit"""
+    text = text.lower()
+    text = re.sub(r"[\n\t\xa0«»\"']", " ", text)
+    text = re.sub(r"\b[lLdDjJcCmM]'(\w+)", r"\1", text)
+    text = text.translate(str.maketrans("", "", string.punctuation))
+    
+    doc = nlp(text)
+    return " ".join([
+        token.lemma_ for token in doc
+        if (token.text not in stopwords_fr and 
+            token.lemma_ not in mots_inutiles and 
+            len(token.lemma_) > 2 and 
+            not token.is_digit)
+    ])
+
+# Interface Streamlit
+st.title("🔠 Analyse Textuelle")
+st.subheader("Nettoyage et Fréquences des Mots")
+
+if 'text' not in st.session_state:
+    st.warning("Veuillez d'abord extraire un texte dans l'onglet précédent")
+else:
+    # Chargement des ressources NLP une seule fois
+    if 'nlp' not in st.session_state:
+        import spacy
+        st.session_state.nlp = spacy.load("fr_core_news_md")
+        st.session_state.stopwords_fr = set(stopwords.words('french'))
+        st.session_state.mots_inutiles = {
+            "les", "des", "aux", "une", "dans", "sur", "par", "avec", "pour",
+            "ce", "ces", "ses", "leur", "leurs", "sous", "comme", "plus"
+        }
+    
+    # Options utilisateur
+    min_word_length = st.slider("Longueur minimale des mots", 2, 6, 3)
+    top_n = st.slider("Nombre de mots à afficher", 5, 30, 10)
+
+    # Traitement
+    with st.spinner("Nettoyage du texte..."):
+        text_clean = nettoyer_texte(
+            st.session_state.text,
+            st.session_state.nlp,
+            st.session_state.stopwords_fr,
+            st.session_state.mots_inutiles
+        )
+        
+        # Calcul des fréquences
+        vectorizer = CountVectorizer()
+        X = vectorizer.fit_transform([text_clean])
+        df_bow = pd.DataFrame(
+            X.toarray(), 
+            columns=vectorizer.get_feature_names_out(), 
+            index=["Texte"]
+        )
+        freq = df_bow.loc["Texte"].sort_values(ascending=False).head(top_n)
+
+    # Affichage des résultats
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Mots les plus fréquents")
+        st.dataframe(freq)
+        
+    with col2:
+        st.markdown("### Nuage de mots")
+        fig, ax = plt.subplots()
+        wc = WordCloud(width=600, height=300, background_color='white').generate_from_frequencies(df_bow.iloc[0].to_dict())
+        ax.imshow(wc, interpolation='bilinear')
+        ax.axis("off")
+        st.pyplot(fig)
+
+    # Sauvegarde pour les étapes suivantes
+    st.session_state.text_clean = text_clean
+    st.success("Analyse terminée !")
