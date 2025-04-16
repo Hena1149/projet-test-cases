@@ -319,30 +319,6 @@ def generate_wordcloud(freq_dict, width=800, height=400, background_color="white
 # ----------------------------
 # NOUVELLES FONCTIONS POUR L'EXTRACTION DE RÈGLES
 # ----------------------------
-@st.cache_resource
-def load_spacy_model():
-    """Charge le modèle spaCy avec gestion d'erreur renforcée"""
-    try:
-        # Vérification explicite de l'installation de spacy
-        try:
-            import spacy
-        except ImportError:
-            raise ImportError("Le module spacy n'est pas installé. Exécutez: pip install spacy")
-        
-        # Chargement du modèle français
-        try:
-            nlp = spacy.load("fr_core_news_md")
-            st.success("Modèle NLP chargé avec succès !")
-            return nlp
-        except OSError:
-            raise OSError("Modèle français non trouvé. Exécutez: python -m spacy download fr_core_news_md")
-            
-    except Exception as e:
-        st.error(f"ERREUR CRITIQUE: {str(e)}")
-        return None
-
-# Chargement initial du modèle
-nlp = load_spacy_model()
 
 def extract_business_rules(text, nlp_model):
     """Nouvelle fonction optimisée pour l'extraction de règles"""
@@ -388,9 +364,7 @@ def create_rule_docx(rules):
 # INTERFACE UTILISATEUR
 # ----------------------------
 st.title("📑 Génération automatique des cas de test à partir du CDC")
-# Chargement du modèle NLP
-nlp = load_spacy_model()
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud", "📑 Règles Métier"])
+tab1, tab2, tab3 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud"])
 
 with tab1:
     st.header("Extraction de Texte")
@@ -401,7 +375,7 @@ with tab1:
             extracted_text = extract_text(uploaded_file)
             
             if extracted_text:
-                st.session_state.source_text = extracted_text  # Toujours utiliser le même nom
+                st.session_state.text = extracted_text  # Toujours utiliser le même nom
                 st.success("Texte extrait avec succès !")
                 
                 with st.expander("Aperçu du texte"):
@@ -457,45 +431,6 @@ with tab3:
                 file_name="wordcloud.png",
                 mime="image/png"
             )
-
-with tab4:
-    st.header("Extraction des Règles Métier")
-    
-    if 'text' not in st.session_state:  # Vérifie la clé correcte
-        st.warning("ℹ️ Vous devez d'abord extraire du texte dans l'onglet 'Extraction'")
-    elif not nlp:
-        st.error("Le modèle NLP n'est pas disponible")
-    else:
-        if st.button("Analyser les règles", type="primary"):
-            with st.spinner("Recherche des règles métier..."):
-                rules = extract_business_rules(st.session_state.text, nlp)  # Utilise 'text' au lieu de 'extracted_text'
-                
-                if rules:
-                    st.session_state.rules = rules
-                    st.success(f"{len(rules)} règles identifiées !")
-                    
-                    # Affichage avec pagination
-                    page_size = 10
-                    total_pages = (len(rules) + page_size - 1) // page_size
-                    page = st.number_input("Page", 1, total_pages, 1)
-                    
-                    start_idx = (page - 1) * page_size
-                    end_idx = min(start_idx + page_size, len(rules))
-                    
-                    for i in range(start_idx, end_idx):
-                        st.markdown(f"**Règle {i+1}**")
-                        st.info(rules[i])
-                    
-                    # Téléchargement
-                    docx_file = create_rule_docx(rules)
-                    st.download_button(
-                        "💾 Exporter les règles (DOCX)",
-                        data=docx_file,
-                        file_name="regles_metier.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
-                else:
-                    st.warning("Aucune règle métier détectée")
 
 # ----------------------------
 # PIED DE PAGE
