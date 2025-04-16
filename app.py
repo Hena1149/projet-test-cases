@@ -258,7 +258,7 @@ import pdfminer.high_level
 import docx
 
 # Configuration de l'application
-st.set_page_config(page_title="Analyse de Documents", layout="wide", page_icon="📑")
+st.set_page_config(page_title="Cas de Test", layout="wide", page_icon="📑")
 
 # ----------------------------
 # FONCTIONS UTILITAIRES
@@ -314,7 +314,7 @@ def generate_wordcloud(freq_dict, width=800, height=400, background_color="white
 # ----------------------------
 # INTERFACE UTILISATEUR
 # ----------------------------
-st.title("📊 Analyse de Documents Professionnels")
+st.title("📑 Génération automatique des cas de test à partir du CDC")
 tab1, tab2, tab3 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud"])
 
 with tab1:
