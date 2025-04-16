@@ -1,3 +1,6 @@
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import random
 import spacy
 from spacy.lang.fr.stop_words import STOP_WORDS
 import streamlit as st
@@ -132,10 +135,73 @@ def generate_wordcloud(freq_dict, width=800, height=400, background_color="white
     return fig
 
 # ----------------------------
+# NOUVELLES FONCTIONS POUR L'ONGLET PDC
+# ----------------------------
+
+def extract_pdc_from_text(text):
+    """Extrait les exigences PDC d'un texte"""
+    patterns = [
+        r"(Vérifier|S['’]assurer|Contrôler|Vérification|Point de contrôle)\b.*?[\.;]",
+        r"(Le système doit|Il faut|Il est nécessaire de).*?(vérifier|contrôler|s'assurer)"
+    ]
+    pdc_list = set()
+    for pattern in patterns:
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+        for match in matches:
+            pdc = match.group().strip()
+            if len(pdc.split()) > 3:  # Filtre les phrases trop courtes
+                if not pdc.endswith('.'):
+                    pdc += '.'
+                pdc_list.add(pdc)
+    return sorted(pdc_list, key=lambda x: len(x), reverse=True)
+
+def generate_pdc_from_rule(rule):
+    """Génère un PDC à partir d'une règle de gestion"""
+    doc = nlp(rule)
+    verbs = [token.text for token in doc if token.pos_ == "VERB"]
+    action = verbs[0] if verbs else "vérifier"
+    return f"{action.capitalize()} que {rule}"
+
+def compare_rules_pdc(rules, pdc_list):
+    """Compare les règles avec les PDC existants"""
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(rules + pdc_list)
+    similarity = cosine_similarity(tfidf_matrix[:len(rules)], tfidf_matrix[len(rules):])
+    return similarity
+
+def create_test_case(pdc, index, is_manual=False):
+    """Crée un cas de test à partir d'un PDC"""
+    templates = [
+        f"Le système doit satisfaire : {pdc}",
+        f"Confirmer que {pdc}",
+        f"Tester la conformité de : {pdc}"
+    ]
+    return {
+        "ID": f"CT-{index:03d}",
+        "Type": "Manuel" if is_manual else "Auto-généré",
+        "PDC": pdc,
+        "Description": random.choice(templates) if not is_manual else pdc,
+        "Étapes": f"1. Préparer l'environnement\n2. Exécuter: {pdc}\n3. Vérifier le résultat",
+        "Résultat attendu": f"{pdc} est correctement implémenté"
+    }
+
+def create_pdc_document(pdc_list):
+    """Crée un document Word à partir des PDC"""
+    doc = Document()
+    doc.add_heading('Points de Contrôle (PDC)', level=1)
+    for i, pdc in enumerate(pdc_list, 1):
+        p = doc.add_paragraph(style='ListBullet')
+        p.add_run(f"{i}. {pdc}").bold = True
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# ----------------------------
 # INTERFACE UTILISATEUR
 # ----------------------------
 st.title("📊 Génération automatique des Cas de test")
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud", "📜 Règles"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud", "📜 Règles", "✅ PDC & Tests"])
 
 with tab1:
     st.header("Extraction de Texte")
@@ -252,6 +318,137 @@ with tab4:
                         st.metric("Longueur moyenne des règles", f"{avg_length:.1f} mots")
                 else:
                     st.warning("Aucune règle de gestion n'a été identifiée dans le document")
+
+
+with tab5:
+    st.header("Gestion des Points de Contrôle et Cas de Test")
+    
+    if 'rules' not in st.session_state:
+        st.warning("Veuillez d'abord extraire les règles dans l'onglet 'Règles'")
+    else:
+        # Section 1: Chargement des PDC existants
+        st.subheader("1. Chargement des PDC existants")
+        has_pdc = st.radio("Avez-vous des PDC existants à importer ?", 
+                          ("Oui, j'ai des PDC existants", "Non, générer des PDC automatiquement"),
+                          index=0)
+        
+        pdc_file = None
+        pdc_text = ""
+        
+        if has_pdc.startswith("Oui"):
+            pdc_file = st.file_uploader("Téléversez votre fichier PDC (PDF/DOCX/TXT)", 
+                                       type=["pdf", "docx", "txt"], 
+                                       key="pdc_uploader")
+            
+            if pdc_file:
+                with st.spinner("Extraction des PDC en cours..."):
+                    pdc_text = extract_text(pdc_file)
+                    st.session_state.pdc_list = extract_pdc_from_text(pdc_text)
+                    
+                    if st.session_state.pdc_list:
+                        st.success(f"{len(st.session_state.pdc_list)} PDC extraits !")
+                        with st.expander("Aperçu des PDC"):
+                            for i, pdc in enumerate(st.session_state.pdc_list[:5], 1):
+                                st.markdown(f"{i}. {pdc}")
+                    else:
+                        st.warning("Aucun PDC détecté dans le document")
+                        st.session_state.pdc_list = []
+        
+        # Section 2: Génération des PDC
+        st.subheader("2. Génération des PDC")
+        
+        if has_pdc.startswith("Non") or (has_pdc.startswith("Oui") and pdc_file):
+            if st.button("Générer/Compléter les PDC", type="primary"):
+                with st.spinner("Création des PDC..."):
+                    # Initialisation de la liste PDC
+                    if 'pdc_list' not in st.session_state:
+                        st.session_state.pdc_list = []
+                    
+                    # Pour les règles sans PDC correspondant
+                    if has_pdc.startswith("Oui") and pdc_file:
+                        similarity = compare_rules_pdc(st.session_state.rules, st.session_state.pdc_list)
+                        threshold = st.slider("Seuil de similarité pour les correspondances", 0.1, 1.0, 0.6)
+                        
+                        for i, rule in enumerate(st.session_state.rules):
+                            if similarity[i].max() < threshold:
+                                generated_pdc = generate_pdc_from_rule(rule)
+                                st.session_state.pdc_list.append(generated_pdc)
+                    else:
+                        # Génération automatique complète
+                        st.session_state.pdc_list = [generate_pdc_from_rule(rule) for rule in st.session_state.rules]
+                    
+                    st.success(f"{len(st.session_state.pdc_list)} PDC prêts !")
+        
+        # Section 3: Visualisation et Export
+        if 'pdc_list' in st.session_state and st.session_state.pdc_list:
+            st.subheader("3. Points de Contrôle")
+            
+            # Affichage paginé
+            pdc_per_page = 5
+            total_pages = (len(st.session_state.pdc_list) + pdc_per_page - 1) // pdc_per_page
+            page = st.number_input("Page", 1, total_pages, 1)
+            
+            start_idx = (page - 1) * pdc_per_page
+            end_idx = min(start_idx + pdc_per_page, len(st.session_state.pdc_list))
+            
+            for i in range(start_idx, end_idx):
+                st.markdown(f"**PDC {i+1}**")
+                st.info(st.session_state.pdc_list[i])
+            
+            # Export PDC
+            st.download_button(
+                "📥 Télécharger les PDC (DOCX)",
+                data=create_pdc_document(st.session_state.pdc_list),
+                file_name="points_de_controle.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            
+            # Section 4: Génération des Cas de Test
+            st.subheader("4. Cas de Test Associés")
+            
+            if st.button("Générer les Cas de Test"):
+                with st.spinner("Création des cas de test..."):
+                    st.session_state.test_cases = []
+                    
+                    for i, pdc in enumerate(st.session_state.pdc_list, 1):
+                        is_manual = has_pdc.startswith("Oui") and i <= len(st.session_state.pdc_list)
+                        st.session_state.test_cases.append(create_test_case(pdc, i, is_manual))
+                    
+                    st.success(f"{len(st.session_state.test_cases)} cas de test générés !")
+            
+            # Affichage des Cas de Test
+            if 'test_cases' in st.session_state:
+                df_test_cases = pd.DataFrame(st.session_state.test_cases)
+                st.dataframe(df_test_cases[["ID", "Type", "PDC", "Description"]])
+                
+                # Export des Cas de Test
+                test_cases_doc = Document()
+                test_cases_doc.add_heading('Cas de Test', level=1)
+                
+                table = test_cases_doc.add_table(rows=1, cols=5)
+                table.style = 'Table Grid'
+                headers = ["ID", "Type", "PDC", "Description", "Étapes"]
+                for i, header in enumerate(headers):
+                    table.cell(0, i).text = header
+                
+                for case in st.session_state.test_cases:
+                    row = table.add_row().cells
+                    row[0].text = case["ID"]
+                    row[1].text = case["Type"]
+                    row[2].text = case["PDC"]
+                    row[3].text = case["Description"]
+                    row[4].text = case["Étapes"]
+                
+                buffer = BytesIO()
+                test_cases_doc.save(buffer)
+                buffer.seek(0)
+                
+                st.download_button(
+                    "📥 Télécharger les Cas de Test (DOCX)",
+                    data=buffer,
+                    file_name="cas_de_test.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
 
 # ----------------------------
 # PIED DE PAGE
