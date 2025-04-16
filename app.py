@@ -201,7 +201,7 @@ with tab3:
                 mime="image/png"
             )
             
-    with tab4:
+with tab4:
     st.header("Extraction des Règles de Gestion")
     nlp_model = load_nlp_model()
     
