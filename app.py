@@ -494,7 +494,7 @@ def generate_wordcloud(text):
         background_color="white",
         colormap="viridis",
         stopwords=set(stopwords.words('french'))
-    .generate(text)
+    ).generate(text)
     
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.imshow(wordcloud, interpolation="bilinear")
