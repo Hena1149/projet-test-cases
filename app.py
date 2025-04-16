@@ -11,7 +11,7 @@ import pdfminer.high_level
 import docx
 
 # Configuration de l'application
-st.set_page_config(page_title="Analyse de Documents", layout="wide", page_icon="📑")
+st.set_page_config(page_title="Génération automatique des Cas de test", layout="wide", page_icon="📑")
 
 # ----------------------------
 # FONCTIONS UTILITAIRES
