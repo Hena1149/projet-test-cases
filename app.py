@@ -458,48 +458,44 @@ with tab3:
                 mime="image/png"
             )
 
-    with tab4:
-        st.header("Extraction des Règles Métier")
-        if 'source_text' not in st.session_state:
-                st.warning("Veuillez d'abord extraire un texte")
-        elif not nlp:
-                st.error("Modèle NLP non chargé")
-        else:
-            # Traitement avec st.session_state.source_text
-        
-        if 'extracted_text' in st.session_state and nlp:
-            if st.button("Analyser les règles", type="primary"):
-                with st.spinner("Recherche des règles métier..."):
-                    rules = extract_business_rules(st.st.session_state.text, nlp)
+with tab4:
+    st.header("Extraction des Règles Métier")
+    
+    if 'text' not in st.session_state:  # Vérifie la clé correcte
+        st.warning("ℹ️ Vous devez d'abord extraire du texte dans l'onglet 'Extraction'")
+    elif not nlp:
+        st.error("Le modèle NLP n'est pas disponible")
+    else:
+        if st.button("Analyser les règles", type="primary"):
+            with st.spinner("Recherche des règles métier..."):
+                rules = extract_business_rules(st.session_state.text, nlp)  # Utilise 'text' au lieu de 'extracted_text'
+                
+                if rules:
+                    st.session_state.rules = rules
+                    st.success(f"{len(rules)} règles identifiées !")
                     
-                    if rules:
-                        st.session_state.rules = rules
-                        st.success(f"{len(rules)} règles identifiées !")
-                        
-                        # Affichage avec pagination
-                        page_size = 10
-                        total_pages = (len(rules) + page_size - 1) // page_size
-                        page = st.number_input("Page", 1, total_pages, 1)
-                        
-                        start_idx = (page - 1) * page_size
-                        end_idx = min(start_idx + page_size, len(rules))
-                        
-                        for i in range(start_idx, end_idx):
-                            st.markdown(f"**Règle {i+1}**")
-                            st.info(rules[i])
-                        
-                        # Téléchargement
-                        docx_file = create_rule_docx(rules)
-                        st.download_button(
-                            "💾 Exporter les règles (DOCX)",
-                            data=docx_file,
-                            file_name="regles_metier.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        )
-                    else:
-                        st.warning("Aucune règle métier détectée")
-        elif not nlp:
-            st.error("Le modèle NLP n'est pas disponible")
+                    # Affichage avec pagination
+                    page_size = 10
+                    total_pages = (len(rules) + page_size - 1) // page_size
+                    page = st.number_input("Page", 1, total_pages, 1)
+                    
+                    start_idx = (page - 1) * page_size
+                    end_idx = min(start_idx + page_size, len(rules))
+                    
+                    for i in range(start_idx, end_idx):
+                        st.markdown(f"**Règle {i+1}**")
+                        st.info(rules[i])
+                    
+                    # Téléchargement
+                    docx_file = create_rule_docx(rules)
+                    st.download_button(
+                        "💾 Exporter les règles (DOCX)",
+                        data=docx_file,
+                        file_name="regles_metier.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                else:
+                    st.warning("Aucune règle métier détectée")
 
 # ----------------------------
 # PIED DE PAGE
