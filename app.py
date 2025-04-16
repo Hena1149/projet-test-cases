@@ -35,9 +35,10 @@ def extract_business_rules(text, nlp_model):
     """
     # Motifs regex pour les règles communes
     patterns = [
-        r"(Si|Lorsque|Quand|Dès que|En cas de).*?(alors|doit|devra|est tenu de|nécessite).*?\.",
-        r"(Le système|L'application|L'utilisateur).*?(doit|devra|peut|ne peut pas).*?\.",
-        r"(Il est obligatoire|Il est nécessaire|Il faut).*?\."
+        r"(Si|Lorsqu’|Quand|Dès que|En cas de).*?(alors|doit|devra|est tenu de|nécessite|implique|entraîne|peut).*?\.",
+        r"(Tout utilisateur|L’[a-zA-Z]+|Un client|Le système|Une demande).*?(doit|est tenu de|devra|ne peut pas|ne doit pas|est interdit de).*?\.",
+        r"(Le non-respect|Toute infraction|Une violation).*?(entraîne|provoque|peut entraîner|résulte en|sera soumis à).*?\.",
+        r"(L’utilisateur|Le client|Le prestataire|L’agent|Le système).*?(est autorisé à|peut|a le droit de).*?\."
     ]
     
     rules = set()
@@ -53,7 +54,8 @@ def extract_business_rules(text, nlp_model):
         doc = nlp_model(text)
         for sent in doc.sents:
             # Détection des phrases contenant des termes réglementaires
-            if any(keyword in sent.text.lower() for keyword in ["doit", "obligatoire", "interdit", "si ", "alors"]):
+            if any(keyword in sent.text.lower() for keyword in ["si ", "alors", "doit", "est tenu de", "ne peut pas", "entraîne", "provoque",
+            "peut entraîner", "doit être", "est obligatoire", "a le droit de", "est autorisé à"]):
                 # Filtrage des phrases trop courtes
                 if len(sent.text.split()) > 5:
                     rules.add(clean_rule(sent.text))
