@@ -155,9 +155,16 @@ def extract_pdc_from_text(text):
                 pdc_list.add(pdc)
     return sorted(pdc_list, key=lambda x: len(x), reverse=True)
 
+# Dans votre fonction main() ou au début du script :
+if 'nlp' not in st.session_state:
+    load_nlp_model()
 def generate_pdc_from_rule(rule):
     """Génère un PDC à partir d'une règle de gestion"""
-    doc = nlp(rule)
+    if 'nlp' not in st.session_state:
+        st.error("Modèle NLP non chargé")
+        return f"Vérifier que {rule}"
+    
+    doc = st.session_state.nlp(rule)
     verbs = [token.text for token in doc if token.pos_ == "VERB"]
     action = verbs[0] if verbs else "vérifier"
     return f"{action.capitalize()} que {rule}"
