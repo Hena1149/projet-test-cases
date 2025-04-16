@@ -1,3 +1,4 @@
+from docx import Document  # Ajoutez cette ligne
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import random
@@ -72,14 +73,15 @@ def clean_rule(rule_text):
         rule_text += '.'
     return rule_text
 
-def create_rules_document(rules):
-    """Crée un document Word des règles"""
-    doc = docx.Document()
-    doc.add_heading('Règles de Gestion Identifiées', level=1)
-    
-    for i, rule in enumerate(rules, 1):
-        doc.add_paragraph(f"{i}. {rule}", style='ListBullet')
-    
+
+def create_pdc_document(pdc_list):
+    """Crée un document Word à partir des PDC"""
+    from docx import Document  # Solution alternative si vous ne pouvez pas ajouter l'import global
+    doc = Document()
+    doc.add_heading('Points de Contrôle (PDC)', level=1)
+    for i, pdc in enumerate(pdc_list, 1):
+        p = doc.add_paragraph(style='ListBullet')
+        p.add_run(f"{i}. {pdc}").bold = True
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
