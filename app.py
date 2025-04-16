@@ -134,7 +134,7 @@ def generate_wordcloud(freq_dict, width=800, height=400, background_color="white
 # ----------------------------
 # INTERFACE UTILISATEUR
 # ----------------------------
-st.title("📊 Analyse de Documents Professionnels")
+st.title("📊 Génération automatique des Cas de test")
 tab1, tab2, tab3, tab4 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud", "📜 Règles"])
 
 with tab1:
