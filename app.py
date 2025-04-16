@@ -493,7 +493,7 @@ def generate_wordcloud(text):
         height=400,
         background_color="white",
         colormap="viridis",
-        stopwords=set(stopwords.words('french'))
+        stopwords=set(stopwords.words('french')))
     .generate(text)
     
     fig, ax = plt.subplots(figsize=(10, 5))
