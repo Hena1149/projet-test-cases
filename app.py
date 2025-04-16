@@ -1,3 +1,5 @@
+import spacy
+from spacy.lang.fr.stop_words import STOP_WORDS
 import streamlit as st
 import re
 import string
@@ -14,6 +16,71 @@ st.set_page_config(page_title="Analyse de Documents", layout="wide", page_icon="
 # ----------------------------
 # FONCTIONS UTILITAIRES
 # ----------------------------
+
+
+@st.cache_resource
+def load_nlp_model():
+    """Charge le modèle spaCy pour le traitement NLP"""
+    try:
+        nlp = spacy.load("fr_core_news_md")
+        return nlp
+    except Exception as e:
+        st.error(f"Erreur de chargement du modèle NLP: {str(e)}")
+        st.info("Veuillez installer le modèle français avec: python -m spacy download fr_core_news_md")
+        return None
+
+def extract_business_rules(text, nlp_model):
+    """
+    Extrait les règles métier du texte en utilisant une combinaison de motifs regex et d'analyse NLP
+    """
+    # Motifs regex pour les règles communes
+    patterns = [
+        r"(Si|Lorsque|Quand|Dès que|En cas de).*?(alors|doit|devra|est tenu de|nécessite).*?\.",
+        r"(Le système|L'application|L'utilisateur).*?(doit|devra|peut|ne peut pas).*?\.",
+        r"(Il est obligatoire|Il est nécessaire|Il faut).*?\."
+    ]
+    
+    rules = set()
+    
+    # Extraction par motifs regex
+    for pattern in patterns:
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+        for match in matches:
+            rules.add(clean_rule(match.group()))
+    
+    # Extraction NLP si le modèle est disponible
+    if nlp_model:
+        doc = nlp_model(text)
+        for sent in doc.sents:
+            # Détection des phrases contenant des termes réglementaires
+            if any(keyword in sent.text.lower() for keyword in ["doit", "obligatoire", "interdit", "si ", "alors"]):
+                # Filtrage des phrases trop courtes
+                if len(sent.text.split()) > 5:
+                    rules.add(clean_rule(sent.text))
+    
+    return sorted(rules, key=lambda x: len(x), reverse=True)
+
+def clean_rule(rule_text):
+    """Nettoie et formate une règle de gestion"""
+    rule_text = re.sub(r"\s+", " ", rule_text).strip()
+    if not rule_text.endswith('.'):
+        rule_text += '.'
+    return rule_text
+
+def create_rules_document(rules):
+    """Crée un document Word des règles"""
+    doc = docx.Document()
+    doc.add_heading('Règles de Gestion Identifiées', level=1)
+    
+    for i, rule in enumerate(rules, 1):
+        doc.add_paragraph(f"{i}. {rule}", style='ListBullet')
+    
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
 def extract_text(uploaded_file):
     """Extrait le texte depuis PDF ou DOCX"""
     try:
@@ -66,7 +133,7 @@ def generate_wordcloud(freq_dict, width=800, height=400, background_color="white
 # INTERFACE UTILISATEUR
 # ----------------------------
 st.title("📊 Analyse de Documents Professionnels")
-tab1, tab2, tab3 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud"])
+tab1, tab2, tab3, tab4 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud", "📜 Règles"])
 
 with tab1:
     st.header("Extraction de Texte")
@@ -133,6 +200,56 @@ with tab3:
                 file_name="wordcloud.png",
                 mime="image/png"
             )
+            
+    with tab4:
+    st.header("Extraction des Règles de Gestion")
+    nlp_model = load_nlp_model()
+    
+    if 'text' not in st.session_state:
+        st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
+    elif not nlp_model:
+        st.error("Le traitement NLP n'est pas disponible")
+    else:
+        if st.button("Extraire les règles", type="primary"):
+            with st.spinner("Analyse en cours (cela peut prendre quelques minutes)..."):
+                rules = extract_business_rules(st.session_state.text, nlp_model)
+                
+                if rules:
+                    st.session_state.rules = rules
+                    st.success(f"{len(rules)} règles identifiées !")
+                    
+                    # Affichage paginé
+                    st.subheader("Règles extraites")
+                    items_per_page = 5
+                    total_pages = (len(rules) + items_per_page - 1) // items_per_page
+                    
+                    page = st.number_input("Page", 1, total_pages, 1, 
+                                         help="Naviguez entre les pages de résultats")
+                    
+                    start_idx = (page - 1) * items_per_page
+                    end_idx = min(start_idx + items_per_page, len(rules))
+                    
+                    for i in range(start_idx, end_idx):
+                        st.markdown(f"**Règle {i+1}**")
+                        st.info(rules[i])
+                    
+                    # Export des résultats
+                    st.subheader("Export des résultats")
+                    docx_file = create_rules_document(rules)
+                    st.download_button(
+                        "📄 Télécharger au format Word",
+                        data=docx_file,
+                        file_name="regles_gestion.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                    
+                    # Option d'analyse supplémentaire
+                    with st.expander("Analyse avancée"):
+                        st.metric("Nombre total de règles", len(rules))
+                        avg_length = sum(len(rule.split()) for rule in rules) / len(rules)
+                        st.metric("Longueur moyenne des règles", f"{avg_length:.1f} mots")
+                else:
+                    st.warning("Aucune règle de gestion n'a été identifiée dans le document")
 
 # ----------------------------
 # PIED DE PAGE
