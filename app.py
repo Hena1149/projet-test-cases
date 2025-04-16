@@ -3,8 +3,6 @@ import pdfminer.high_level
 import docx
 from io import BytesIO
 import pandas as pd
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
 st.set_page_config(page_title="Extracteur de Texte", layout="wide")
 st.title("📝 Extracteur de Texte (PDF/DOCX)")
 
