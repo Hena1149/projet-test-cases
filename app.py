@@ -465,7 +465,7 @@ with tab3:
         if 'extracted_text' in st.session_state and nlp:
             if st.button("Analyser les règles", type="primary"):
                 with st.spinner("Recherche des règles métier..."):
-                    rules = extract_business_rules(st.session_state.extracted_text, nlp)
+                    rules = extract_business_rules(st.st.session_state.text, nlp)
                     
                     if rules:
                         st.session_state.rules = rules
