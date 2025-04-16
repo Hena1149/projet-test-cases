@@ -321,13 +321,28 @@ def generate_wordcloud(freq_dict, width=800, height=400, background_color="white
 # ----------------------------
 @st.cache_resource
 def load_spacy_model():
-    """Charge le modèle spaCy une seule fois"""
+    """Charge le modèle spaCy avec gestion d'erreur renforcée"""
     try:
-        nlp = spacy.load("fr_core_news_md")
-        return nlp
+        # Vérification explicite de l'installation de spacy
+        try:
+            import spacy
+        except ImportError:
+            raise ImportError("Le module spacy n'est pas installé. Exécutez: pip install spacy")
+        
+        # Chargement du modèle français
+        try:
+            nlp = spacy.load("fr_core_news_md")
+            st.success("Modèle NLP chargé avec succès !")
+            return nlp
+        except OSError:
+            raise OSError("Modèle français non trouvé. Exécutez: python -m spacy download fr_core_news_md")
+            
     except Exception as e:
-        st.error(f"Erreur de chargement du modèle NLP: {str(e)}")
+        st.error(f"ERREUR CRITIQUE: {str(e)}")
         return None
+
+# Chargement initial du modèle
+nlp = load_spacy_model()
 
 def extract_business_rules(text, nlp_model):
     """Nouvelle fonction optimisée pour l'extraction de règles"""
