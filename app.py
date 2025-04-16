@@ -145,99 +145,246 @@
 # #     st.success("Analyse terminée !")
 
 
+
+
+# # 2ème code source
+
+# import streamlit as st
+# import re
+# import string
+# from io import BytesIO
+# import pandas as pd
+# import matplotlib.pyplot as plt
+
+# # Configuration de base
+# st.set_page_config(page_title="Cas de Test", layout="wide")
+# st.title("📑 Génération automatique des cas de test à partir du CDC")
+
+# # ----------------------------
+# # PARTIE 1: Extraction du texte
+# # ----------------------------
+# def extract_text(uploaded_file):
+#     """Fonction unifiée d'extraction pour PDF/DOCX"""
+#     try:
+#         file_bytes = uploaded_file.getvalue()
+        
+#         if uploaded_file.type == "application/pdf":
+#             import pdfminer.high_level
+#             with BytesIO(file_bytes) as f:
+#                 text = pdfminer.high_level.extract_text(f)
+#         elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+#             import docx
+#             with BytesIO(file_bytes) as f:
+#                 doc = docx.Document(f)
+#                 text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+#         else:
+#             raise ValueError("Format non supporté")
+            
+#         return text if text.strip() else None
+        
+#     except Exception as e:
+#         st.error(f"Erreur d'extraction : {str(e)}")
+#         return None
+
+# # ----------------------------
+# # PARTIE 2: Nettoyage du texte
+# # ----------------------------
+# def simple_text_clean(text):
+#     """Version allégée du nettoyage sans spaCy"""
+#     text = text.lower()
+#     text = re.sub(r"[^\w\s]", " ", text)  # Supprime la ponctuation
+#     text = re.sub(r"\s+", " ", text)      # Supprime les espaces multiples
+#     return text.strip()
+
+# def show_word_frequencies(text, top_n=10):
+#     """Analyse des fréquences sans sklearn"""
+#     words = [word for word in text.split() if len(word) > 2]
+#     freq = pd.Series(words).value_counts().head(top_n)
+    
+#     fig, ax = plt.subplots()
+#     freq.plot.bar(ax=ax, color='skyblue')
+#     plt.xticks(rotation=45)
+#     st.pyplot(fig)
+    
+#     return freq
+
+# # ----------------------------
+# # INTERFACE UTILISATEUR
+# # ----------------------------
+# tab1, tab2 = st.tabs(["📤 Extraction", "🔍 Analyse"])
+
+# with tab1:
+#     uploaded_file = st.file_uploader("Téléversez un document", type=["pdf", "docx"])
+    
+#     if uploaded_file:
+#         if st.button("Extraire le texte"):
+#             with st.spinner("Extraction en cours..."):
+#                 extracted_text = extract_text(uploaded_file)
+                
+#                 if extracted_text:
+#                     st.session_state.text = extracted_text
+#                     st.success("Texte extrait avec succès !")
+#                     st.download_button(
+#                         "💾 Télécharger le texte brut",
+#                         data=extracted_text,
+#                         file_name="texte_extrait.txt"
+#                     )
+                    
+#                     with st.expander("Aperçu du texte"):
+#                         st.text(extracted_text[:1000] + ("..." if len(extracted_text) > 1000 else ""))
+
+# with tab2:
+#     if 'text' not in st.session_state:
+#         st.warning("Veuillez d'abord extraire un texte")
+#     else:
+#         st.header("Analyse Simplifiée")
+#         clean_text = simple_text_clean(st.session_state.text)
+        
+#         st.subheader("Fréquence des mots")
+#         freq = show_word_frequencies(clean_text)
+        
+#         st.subheader("Données brutes")
+#         st.dataframe(freq.rename("Occurences"))
+
+
 import streamlit as st
 import re
 import string
 from io import BytesIO
 import pandas as pd
 import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+import pdfminer.high_level
+import docx
 
-# Configuration de base
-st.set_page_config(page_title="Cas de Test", layout="wide")
-st.title("📑 Génération automatique des cas de test à partir du CDC")
+# Configuration de l'application
+st.set_page_config(page_title="Analyse de Documents", layout="wide", page_icon="📑")
 
 # ----------------------------
-# PARTIE 1: Extraction du texte
+# FONCTIONS UTILITAIRES
 # ----------------------------
 def extract_text(uploaded_file):
-    """Fonction unifiée d'extraction pour PDF/DOCX"""
+    """Extrait le texte depuis PDF ou DOCX"""
     try:
         file_bytes = uploaded_file.getvalue()
         
         if uploaded_file.type == "application/pdf":
-            import pdfminer.high_level
             with BytesIO(file_bytes) as f:
                 text = pdfminer.high_level.extract_text(f)
         elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            import docx
             with BytesIO(file_bytes) as f:
                 doc = docx.Document(f)
                 text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
         else:
             raise ValueError("Format non supporté")
             
-        return text if text.strip() else None
+        return text if text and text.strip() else None
         
     except Exception as e:
         st.error(f"Erreur d'extraction : {str(e)}")
         return None
 
-# ----------------------------
-# PARTIE 2: Nettoyage du texte
-# ----------------------------
-def simple_text_clean(text):
-    """Version allégée du nettoyage sans spaCy"""
+def clean_text(text):
+    """Nettoyage basique du texte"""
     text = text.lower()
     text = re.sub(r"[^\w\s]", " ", text)  # Supprime la ponctuation
-    text = re.sub(r"\s+", " ", text)      # Supprime les espaces multiples
+    text = re.sub(r"\s+", " ", text)      # Espaces multiples -> simple
     return text.strip()
 
-def show_word_frequencies(text, top_n=10):
-    """Analyse des fréquences sans sklearn"""
-    words = [word for word in text.split() if len(word) > 2]
-    freq = pd.Series(words).value_counts().head(top_n)
+def calculate_frequencies(text):
+    """Calcule les fréquences des mots"""
+    words = [word for word in text.split() if len(word) > 2]  # Filtre mots courts
+    return pd.Series(words).value_counts()
+
+def generate_wordcloud(freq_dict, width=800, height=400, background_color="white", colormap="viridis"):
+    """Génère un nuage de mots"""
+    fig, ax = plt.subplots(figsize=(10, 5))
+    wc = WordCloud(
+        width=width,
+        height=height,
+        background_color=background_color,
+        colormap=colormap,
+        max_words=100
+    ).generate_from_frequencies(freq_dict)
     
-    fig, ax = plt.subplots()
-    freq.plot.bar(ax=ax, color='skyblue')
-    plt.xticks(rotation=45)
-    st.pyplot(fig)
-    
-    return freq
+    ax.imshow(wc, interpolation="bilinear")
+    ax.axis("off")
+    return fig
 
 # ----------------------------
 # INTERFACE UTILISATEUR
 # ----------------------------
-tab1, tab2 = st.tabs(["📤 Extraction", "🔍 Analyse"])
+st.title("📊 Analyse de Documents Professionnels")
+tab1, tab2, tab3 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud"])
 
 with tab1:
-    uploaded_file = st.file_uploader("Téléversez un document", type=["pdf", "docx"])
+    st.header("Extraction de Texte")
+    uploaded_file = st.file_uploader("Téléversez un document (PDF ou DOCX)", type=["pdf", "docx"])
     
-    if uploaded_file:
-        if st.button("Extraire le texte"):
-            with st.spinner("Extraction en cours..."):
-                extracted_text = extract_text(uploaded_file)
+    if uploaded_file and st.button("Extraire le texte"):
+        with st.spinner("Extraction en cours..."):
+            extracted_text = extract_text(uploaded_file)
+            
+            if extracted_text:
+                st.session_state.text = extracted_text
+                st.success("Texte extrait avec succès !")
                 
-                if extracted_text:
-                    st.session_state.text = extracted_text
-                    st.success("Texte extrait avec succès !")
-                    st.download_button(
-                        "💾 Télécharger le texte brut",
-                        data=extracted_text,
-                        file_name="texte_extrait.txt"
-                    )
-                    
-                    with st.expander("Aperçu du texte"):
-                        st.text(extracted_text[:1000] + ("..." if len(extracted_text) > 1000 else ""))
+                with st.expander("Aperçu du texte"):
+                    st.text(extracted_text[:1000] + ("..." if len(extracted_text) > 1000 else ""))
 
 with tab2:
+    st.header("Analyse Textuelle")
+    
     if 'text' not in st.session_state:
-        st.warning("Veuillez d'abord extraire un texte")
+        st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
     else:
-        st.header("Analyse Simplifiée")
-        clean_text = simple_text_clean(st.session_state.text)
+        with st.spinner("Nettoyage du texte..."):
+            st.session_state.text_clean = clean_text(st.session_state.text)
+            st.session_state.freq = calculate_frequencies(st.session_state.text_clean)
         
         st.subheader("Fréquence des mots")
-        freq = show_word_frequencies(clean_text)
+        top_n = st.slider("Nombre de mots à afficher", 5, 50, 20)
+        st.dataframe(st.session_state.freq.head(top_n))
+
+with tab3:
+    st.header("Visualisation WordCloud")
+    
+    if 'text_clean' not in st.session_state:
+        st.warning("Veuillez d'abord analyser un texte dans l'onglet 'Analyse'")
+    else:
+        with st.expander("Paramètres avancés"):
+            col1, col2 = st.columns(2)
+            with col1:
+                width = st.slider("Largeur", 400, 1200, 800, key="wc_width")
+                height = st.slider("Hauteur", 200, 800, 400, key="wc_height")
+            with col2:
+                bg_color = st.color_picker("Couleur de fond", "#FFFFFF", key="wc_bg")
+                colormap = st.selectbox("Palette", ["viridis", "plasma", "inferno", "magma", "cividis"], key="wc_cmap")
         
-        st.subheader("Données brutes")
-        st.dataframe(freq.rename("Occurences"))
+        if st.button("Générer le WordCloud"):
+            freq_dict = st.session_state.freq.to_dict()
+            fig = generate_wordcloud(
+                freq_dict,
+                width=width,
+                height=height,
+                background_color=bg_color,
+                colormap=colormap
+            )
+            
+            st.pyplot(fig)
+            
+            # Téléchargement
+            img_buffer = BytesIO()
+            plt.savefig(img_buffer, format='png', bbox_inches='tight')
+            st.download_button(
+                label="💾 Télécharger l'image",
+                data=img_buffer.getvalue(),
+                file_name="wordcloud.png",
+                mime="image/png"
+            )
+
+# ----------------------------
+# PIED DE PAGE
+# ----------------------------
+st.markdown("---")
+st.caption("Application développée avec Streamlit - Mise à jour : %s" % pd.Timestamp.now().strftime("%d/%m/%Y"))
