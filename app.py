@@ -401,7 +401,7 @@ with tab1:
             extracted_text = extract_text(uploaded_file)
             
             if extracted_text:
-                st.session_state.text = extracted_text
+                st.session_state.source_text = extracted_text  # Toujours utiliser le même nom
                 st.success("Texte extrait avec succès !")
                 
                 with st.expander("Aperçu du texte"):
@@ -460,7 +460,12 @@ with tab3:
 
     with tab4:
         st.header("Extraction des Règles Métier")
-        st.warning("ℹ️ Vous devez d'abord extraire du texte dans l'onglet précédent")
+        if 'source_text' not in st.session_state:
+                st.warning("Veuillez d'abord extraire un texte")
+        elif not nlp:
+                st.error("Modèle NLP non chargé")
+        else:
+            # Traitement avec st.session_state.source_text
         
         if 'extracted_text' in st.session_state and nlp:
             if st.button("Analyser les règles", type="primary"):
