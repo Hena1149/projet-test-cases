@@ -251,7 +251,7 @@
 
 
 #3ème Bloc
-
+import spacy
 import streamlit as st
 import re
 import string
@@ -261,7 +261,6 @@ import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import pdfminer.high_level
 import docx
-import spacy
 
 # Configuration de l'application
 st.set_page_config(page_title="Cas de Test", layout="wide", page_icon="📑")
