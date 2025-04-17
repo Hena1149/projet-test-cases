@@ -92,119 +92,180 @@ def load_nlp_model():
 
 def extract_business_rules(text, nlp_model):
     """
-    Extrait les règles métier avec une analyse approfondie utilisant :
-    - Des motifs regex avancés
-    - L'analyse syntaxique (dépendances)
-    - La détection des constructions conditionnelles
-    - Le regroupement thématique
+    Extrait et structure les règles métier avec :
+    - Découpage des phrases complexes
+    - Normalisation de la structure
+    - Validation syntaxique
+    - Organisation logique
     """
     if not text or not nlp_model:
         return []
 
-    # 1. Pré-traitement du texte
-    text = preprocess_text(text)
+    # 1. Prétraitement intelligent
+    text = re.sub(r'([.;])\s+', r'\1\n', text)  # Crée des sauts de ligne après ponctuation
     doc = nlp_model(text)
     
-    # 2. Ensemble pour éviter les doublons
-    rules = set()
+    # 2. Extraction des règles candidates
+    rule_candidates = set()
     
-    # 3. Motifs regex avancés (ajout de nombreux nouveaux patterns)
-    advanced_patterns = [
-        # Conditionnelles complètes
-        r"(Si|Lorsque|Quand|Dès que|En cas de|Dans le cas où)\s+(.*?)\s*,\s*(alors|il est|on doit|le système doit|vous devez)\s+(.*?)(?=[.;])",
+    # 3. Analyse phrase par phrase avec découpage
+    for sent in doc.sents:
+        # Découpage des phrases complexes
+        sub_sentences = split_complex_sentence(sent.text)
         
-        # Obligations
-        r"(Le|La|Les)\s+([a-zA-ZÀ-ÿ0-9_]+)\s+(doit|devra|est tenu de|a l'obligation de|nécessite)\s+(.*?)(?=[.;])",
-        
-        # Interdictions
-        r"(Il est interdit|Interdiction|Ne pas|Ne doit pas|N'est pas autorisé)\s+(de|d'|à)\s+(.*?)(?=[.;])",
-        
-        # Droits/autorisations
-        r"(Peut|A le droit|Est autorisé|A la possibilité)\s+(de|d'|à)\s+(.*?)(?=[.;])",
-        
-        # Conséquences
-        r"(En cas de|En cas|Si non-respect)\s+(.*?)\s*,\s*(sera|entraîne|provoque|donne lieu à)\s+(.*?)(?=[.;])",
-        
-        # Règles temporelles
-        r"(Avant|Après|Dans un délai de)\s+(.*?)\s*,\s*(il faut|vous devez|le système)\s+(.*?)(?=[.;])"
+        for sub_sent in sub_sentences:
+            # Validation et normalisation
+            normalized_rules = normalize_rule(sub_sent, nlp_model)
+            if normalized_rules:
+                rule_candidates.update(normalized_rules)
+    
+    # 4. Post-traitement et organisation
+    return organize_rules(rule_candidates)
+
+def split_complex_sentence(sentence):
+    """
+    Découpe une phrase complexe en unités simples
+    selon les conjonctions et signes de ponctuation
+    """
+    # Séparation par conjonctions
+    split_patterns = [
+        r'\s+(et|ou|mais|ainsi que|d\'une part|d\'autre part|,\s*)\s+',
+        r'\s*;\s*',
+        r'\s*\.\s*'
     ]
     
-    # 4. Extraction par motifs regex avancés
-    for pattern in advanced_patterns:
-        matches = re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE)
-        for match in matches:
-            full_rule = match.group().strip()
-            if len(full_rule.split()) > 4:  # Filtre les phrases trop courtes
-                rules.add(format_rule(full_rule))
-
-    # 5. Analyse syntaxique approfondie avec spaCy
-    for sent in doc.sents:
-        # Détection des constructions conditionnelles
-        conditional_keywords = ["si", "lorsque", "quand", "dès que", "en cas"]
-        obligation_keywords = ["doit", "obligatoire", "requis", "nécessaire", "exigé"]
-        
-        # Vérifie la structure de la phrase
-        has_conditional = any(token.text.lower() in conditional_keywords for token in sent)
-        has_obligation = any(token.text.lower() in obligation_keywords for token in sent)
-        has_action = any(token.dep_ in ["ROOT", "xcomp"] for token in sent)
-        
-        # Règles de qualité pour la sélection
-        if (has_conditional or has_obligation) and has_action and len(sent.text.split()) > 6:
-            rules.add(format_rule(sent.text))
-            
-        # Détection des verbes modaux
-        for token in sent:
-            if token.dep_ == "aux" and token.head.pos_ == "VERB":
-                rule_candidate = f"{token.text.capitalize()} {token.head.text} {sent[token.head.i+1:].text}"
-                rules.add(format_rule(rule_candidate))
-
-    # 6. Post-traitement et organisation des règles
-    organized_rules = organize_rules(rules)
+    sub_sentences = [sentence]
+    for pattern in split_patterns:
+        new_sub = []
+        for sent in sub_sentences:
+            parts = re.split(pattern, sent, flags=re.IGNORECASE)
+            # Garde seulement les parties significatives
+            new_sub.extend(p for p in parts if p and len(p.split()) > 3)
+        sub_sentences = new_sub
     
-    return organized_rules
+    return [s.strip() for s in sub_sentences if s.strip()]
 
-def preprocess_text(text):
-    """Nettoyage initial du texte"""
-    text = re.sub(r"\s+", " ", text)  # Espaces multiples
-    text = re.sub(r"(\w)-\s", r"\1", text)  # Césures
-    return text.strip()
+def normalize_rule(rule_text, nlp_model):
+    """
+    Normalise une règle selon un modèle standard :
+    "Condition → Action → Conséquence"
+    """
+    doc = nlp_model(rule_text)
+    normalized_rules = set()
+    
+    # Structure conditionnelle
+    conditional_markers = ["si", "lorsque", "quand", "dès que"]
+    action_markers = ["doit", "devra", "nécessite", "obligatoire"]
+    
+    # Vérifie si c'est une règle valide
+    if not is_valid_rule(doc):
+        return normalized_rules
+    
+    # Découpage des règles composites
+    if any(marker in rule_text.lower() for marker in conditional_markers):
+        # Format: "Si [condition], alors [action]"
+        parts = re.split(r',\s*(alors|donc|par conséquent)\s*', rule_text, flags=re.IGNORECASE)
+        if len(parts) >= 3:
+            condition = parts[0]
+            action = ' '.join(parts[2:])
+            normalized_rules.add(f"Si {clean_segment(condition)}, alors {clean_segment(action)}.")
+    else:
+        # Format: "[Sujet] doit [action]"
+        normalized_rules.add(standardize_structure(rule_text))
+    
+    return normalized_rules
 
-def format_rule(rule_text):
-    """Formate une règle pour une meilleure lisibilité"""
-    rule_text = re.sub(r"\s+", " ", rule_text).strip()
-    rule_text = rule_text.capitalize()
+def is_valid_rule(doc):
+    """
+    Valide qu'une phrase est bien une règle métier selon :
+    - Structure grammaticale
+    - Termes spécifiques
+    - Longueur minimale
+    """
+    min_words = 5
+    max_words = 30
+    required_pos = ["VERB", "NOUN"]
     
-    # Supprime les espaces avant ponctuation
-    rule_text = re.sub(r"\s+([.,;:])", r"\1", rule_text)
+    # Filtre par longueur
+    if len(doc) < min_words or len(doc) > max_words:
+        return False
     
-    # Ajoute un point si manquant
-    if not rule_text.endswith(('.', '!', '?')):
-        rule_text += '.'
-        
-    return rule_text
+    # Vérifie la présence de verbes et noms
+    has_required_pos = any(token.pos_ in required_pos for token in doc)
+    if not has_required_pos:
+        return False
+    
+    # Vérifie les termes réglementaires
+    rule_keywords = ["doit", "obligatoire", "interdit", "autorise", "requis"]
+    if not any(token.text.lower() in rule_keywords for token in doc):
+        return False
+    
+    return True
 
-def organize_rules(rules):
-    """Organise les règles par catégories"""
-    # Classement par longueur (les plus complètes d'abord)
-    sorted_rules = sorted(rules, key=lambda x: len(x), reverse=True)
-    
-    # Regroupement thématique (optionnel)
-    categorized_rules = {
-        "Conditionnelles": [r for r in sorted_rules if any(kw in r.lower() for kw in ["si ", "lorsque", "quand"])],
-        "Obligations": [r for r in sorted_rules if any(kw in r.lower() for kw in ["doit", "obligation", "requis"])],
-        "Interdictions": [r for r in sorted_rules if any(kw in r.lower() for kw in ["interdit", "ne pas", "interdiction"])],
-        "Autorisations": [r for r in sorted_rules if any(kw in r.lower() for kw in ["peut", "autorisé", "droit"])],
-        "Autres": [r for r in sorted_rules if not any(kw in r.lower() for kw in ["si ", "doit", "interdit", "peut"])]
+def standardize_structure(text):
+    """
+    Applique une structure standard aux règles simples :
+    "[Sujet] [verbe modal] [action]"
+    """
+    # Normalisation des verbes modaux
+    replacements = {
+        r"est tenu de": "doit",
+        r"a l'obligation de": "doit",
+        r"n'est pas autorisé à": "ne peut pas",
+        r"est dans l'obligation de": "doit"
     }
     
-    # Retourne une liste plate mais organisée
-    organized = []
-    for category, rule_list in categorized_rules.items():
-        if rule_list:
-            organized.append(f"\n=== {category.upper()} ===")
-            organized.extend(rule_list)
+    for pattern, repl in replacements.items():
+        text = re.sub(pattern, repl, text, flags=re.IGNORECASE)
     
-    return organized if organized else sorted_rules
+    # Capitalisation et ponctuation
+    text = text.capitalize()
+    if not text.endswith('.'):
+        text += '.'
+    
+    return text
+
+def organize_rules(rules):
+    """
+    Organise les règles par :
+    1. Type (conditionnelle, obligation...)
+    2. Longueur (des plus précises aux plus générales)
+    3. Cohérence thématique
+    """
+    # Classement initial par pertinence
+    sorted_rules = sorted(rules, key=lambda x: (
+        -len(x),  # Les plus longues d'abord (supposées plus complètes)
+        x.lower()  # Ordre alphabétique secondaire
+    )
+    
+    # Regroupement intelligent
+    organized = []
+    current_category = None
+    
+    for rule in sorted_rules:
+        # Détection de la catégorie
+        rule_lower = rule.lower()
+        if any(kw in rule_lower for kw in ["si ", "lorsque"]):
+            category = "RÈGLES CONDITIONNELLES"
+        elif any(kw in rule_lower for kw in ["doit", "obligatoire"]):
+            category = "OBLIGATIONS"
+        elif any(kw in rule_lower for kw in ["interdit", "ne peut pas"]):
+            category = "INTERDICTIONS"
+        elif any(kw in rule_lower for kw in ["peut", "autorisé"]):
+            category = "AUTORISATIONS"
+        else:
+            category = "RÈGLES DIVERSES"
+        
+        # Ajout d'un séparateur si changement de catégorie
+        if category != current_category:
+            organized.append(f"\n=== {category} ===\n")
+            current_category = category
+        
+        organized.append(f"• {rule}")
+    
+    return organized
+
+
 
 
 def clean_rule(rule_text):
@@ -542,38 +603,38 @@ with tab3:
 #                     st.warning("Aucune règle de gestion n'a été identifiée dans le document")
 
 with tab4:
-    st.header("Extraction avancée des Règles")
+    st.header("📋 Règles de Gestion Structurées")
     
     if 'text' not in st.session_state:
-        st.warning("Veuillez d'abord extraire un texte")
+        st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
     else:
         nlp_model = load_nlp_model()
-        if st.button("Extraire les règles (version avancée)"):
-            with st.spinner("Analyse approfondie en cours..."):
+        if st.button("🔍 Extraire les règles (version structurée)"):
+            with st.spinner("Analyse syntaxique approfondie en cours..."):
                 rules = extract_business_rules(st.session_state.text, nlp_model)
                 
                 if rules:
-                    st.session_state.rules = rules
+                    st.session_state.organized_rules = rules
+                    st.success(f"✅ {len([r for r in rules if not r.startswith('\n===')])} règles structurées identifiées")
                     
-                    # Affichage avec onglets par catégorie
-                    tab_cond, tab_obl, tab_int, tab_aut, tab_other = st.tabs(
-                        ["Conditionnelles", "Obligations", "Interdictions", "Autorisations", "Autres"])
-                    
-                    for rule in rules:
-                        if "===" in rule:  # Séparateur de catégorie
-                            continue
-                            
-                        # Ajoute à l'onglet approprié
-                        if any(kw in rule.lower() for kw in ["si ", "lorsque"]):
-                            with tab_cond: st.info(rule)
-                        elif any(kw in rule.lower() for kw in ["doit", "obligation"]):
-                            with tab_obl: st.warning(rule)
-                        elif any(kw in rule.lower() for kw in ["interdit", "ne pas"]):
-                            with tab_int: st.error(rule)
-                        elif any(kw in rule.lower() for kw in ["peut", "autorisé"]):
-                            with tab_aut: st.success(rule)
+                    # Affichage avec expanders par catégorie
+                    for line in rules:
+                        if line.startswith('\n==='):
+                            category = line.strip('=\n ')
+                            with st.expander(f"**{category}**", expanded=True):
+                                continue
                         else:
-                            with tab_other: st.write(rule)
+                            st.markdown(line)
+                    
+                    # Export amélioré
+                    st.download_button(
+                        label="📥 Télécharger le rapport complet",
+                        data="\n".join(rules),
+                        file_name="regles_gestion_structurées.txt",
+                        mime="text/plain"
+                    )
+                else:
+                    st.warning("Aucune règle valide n'a été identifiée dans le document")
 
 
 with tab5:
