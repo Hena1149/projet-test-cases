@@ -236,7 +236,7 @@ def organize_rules(rules):
     sorted_rules = sorted(rules, key=lambda x: (
         -len(x),  # Les plus longues d'abord (supposées plus complètes)
         x.lower()  # Ordre alphabétique secondaire
-    )
+    ))
     
     # Regroupement intelligent
     organized = []
