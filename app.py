@@ -322,8 +322,6 @@ with tab1:
 #         st.dataframe(st.session_state.freq.head(top_n))
 
 with tab2:
-    st.header("Analyse Textuelle")
-    
     if 'text' not in st.session_state:
         st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
     else:
