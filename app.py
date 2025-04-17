@@ -375,7 +375,7 @@ with tab4:
 
 with tab5:
     st.header("Gestion des Points de Contrôle et Cas de Test")
-    nlp_model = load_nlp_model()
+    nlp = spacy.load("fr_core_news_md")
     
     if 'rules' not in st.session_state:
         st.warning("Veuillez d'abord extraire les règles dans l'onglet 'Règles'")
