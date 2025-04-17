@@ -15,7 +15,7 @@ import pdfminer.high_level
 import docx
 
 # Configuration de l'application
-st.set_page_config(page_title="Génération automatique des Cas de test", layout="wide", page_icon="📑")
+st.set_page_config(page_title="Générateur de Cas de test à partir du CDC", layout="wide", page_icon="📑")
 
 # ----------------------------
 # FONCTIONS UTILITAIRES
