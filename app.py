@@ -149,12 +149,48 @@ def create_rules_document(rules):
     return buffer
 
 
-def clean_text(text):
-    """Nettoyage basique du texte"""
+# def clean_text(text):
+#     """Nettoyage basique du texte"""
+#     text = text.lower()
+#     text = re.sub(r"[^\w\s]", " ", text)  # Supprime la ponctuation
+#     text = re.sub(r"\s+", " ", text)      # Espaces multiples -> simple
+#     return text.strip()
+
+def clean_text(text, nlp_model, min_word_length=3):
+    """
+    Nettoyage approfondi du texte avec :
+    - Suppression des stopwords
+    - Lemmatisation
+    - Filtrage par catégorie grammaticale
+    - Suppression des mots trop courts
+    """
+    # Initialisation
+    if not text or not nlp_model:
+        return ""
+    
+    # Nettoyage de base
     text = text.lower()
-    text = re.sub(r"[^\w\s]", " ", text)  # Supprime la ponctuation
-    text = re.sub(r"\s+", " ", text)      # Espaces multiples -> simple
-    return text.strip()
+    text = re.sub(r"[^\w\sàâäéèêëîïôöùûüç]", " ", text)  # Garde les caractères accentués
+    text = re.sub(r"\s+", " ", text).strip()
+    
+    # Traitement NLP
+    doc = nlp_model(text)
+    cleaned_tokens = []
+    
+    for token in doc:
+        # Conditions de filtrage
+        if (token.is_stop or 
+            token.is_punct or 
+            len(token.text) < min_word_length or
+            token.pos_ in ["DET", "ADP", "CCONJ", "PRON", "PART"]):
+            continue
+            
+        # Lemmatisation (forme de base)
+        lemma = token.lemma_.strip()
+        if lemma:
+            cleaned_tokens.append(lemma)
+    
+    return " ".join(cleaned_tokens)
 
 def calculate_frequencies(text):
     """Calcule les fréquences des mots"""
@@ -271,19 +307,37 @@ with tab1:
                 with st.expander("Aperçu du texte"):
                     st.text(extracted_text[:1000] + ("..." if len(extracted_text) > 1000 else ""))
 
+# with tab2:
+#     st.header("Analyse Textuelle")
+    
+#     if 'text' not in st.session_state:
+#         st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
+#     else:
+#         with st.spinner("Nettoyage du texte..."):
+#             st.session_state.text_clean = clean_text(st.session_state.text)
+#             st.session_state.freq = calculate_frequencies(st.session_state.text_clean)
+        
+#         st.subheader("Fréquence des mots")
+#         top_n = st.slider("Nombre de mots à afficher", 5, 50, 20)
+#         st.dataframe(st.session_state.freq.head(top_n))
+
 with tab2:
     st.header("Analyse Textuelle")
     
     if 'text' not in st.session_state:
         st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
     else:
-        with st.spinner("Nettoyage du texte..."):
-            st.session_state.text_clean = clean_text(st.session_state.text)
-            st.session_state.freq = calculate_frequencies(st.session_state.text_clean)
-        
-        st.subheader("Fréquence des mots")
-        top_n = st.slider("Nombre de mots à afficher", 5, 50, 20)
-        st.dataframe(st.session_state.freq.head(top_n))
+        nlp_model = load_nlp_model()  # Charger le modèle
+        if not nlp_model:
+            st.error("Modèle NLP non disponible pour le nettoyage")
+        else:
+            with st.spinner("Nettoyage approfondi en cours..."):
+                st.session_state.text_clean = clean_text(st.session_state.text, nlp_model)
+                st.session_state.freq = calculate_frequencies(st.session_state.text_clean)
+            
+            st.subheader("Fréquence des mots (nettoyés)")
+            top_n = st.slider("Nombre de mots à afficher", 5, 50, 20)
+            st.dataframe(st.session_state.freq.head(top_n))
 
 with tab3:
     st.header("Visualisation WordCloud")
