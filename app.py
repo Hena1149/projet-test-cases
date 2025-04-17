@@ -291,7 +291,7 @@ def create_pdc_document(pdc_list):
 # ----------------------------
 # INTERFACE UTILISATEUR
 # ----------------------------
-st.title("📊 Génération automatique des Cas de test")
+st.title("Générateur de Cas de Test")
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📤 Extraction", "🔍 Analyse", "☁️ WordCloud", "📜 Règles", "✅ PDC & Tests"])
 
 with tab1:
