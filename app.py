@@ -413,6 +413,7 @@ with tab5:
         nlp_model = load_nlp_model()
         if has_pdc.startswith("Non") or (has_pdc.startswith("Oui") and pdc_file):
             if st.button("Générer/Compléter les PDC", type="primary"):
+            nlp_model = load_nlp_model()
                 with st.spinner("Création des PDC..."):
                     # Initialisation de la liste PDC
                     if 'pdc_list' not in st.session_state:
@@ -430,6 +431,7 @@ with tab5:
                     else:
                         # Génération automatique complète
                         st.session_state.pdc_list = [generate_pdc_from_rule(rule) for rule in st.session_state.rules]
+                        nlp_model = load_nlp_model()
                     
                     st.success(f"{len(st.session_state.pdc_list)} PDC prêts !")
         
