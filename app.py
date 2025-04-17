@@ -90,180 +90,72 @@ def load_nlp_model():
 #     return sorted(rules, key=lambda x: len(x), reverse=True)
 
 
-def extract_business_rules(text, nlp_model):
+def extract_business_rules(text):
     """
-    Extrait et structure les règles métier avec :
-    - Découpage des phrases complexes
-    - Normalisation de la structure
-    - Validation syntaxique
-    - Organisation logique
+    Version simplifiée pour extraire les règles métier avec :
+    - Regex ciblés
+    - Formatage basique
+    - Découpage des phrases multiples
     """
-    if not text or not nlp_model:
+    if not text:
         return []
 
-    # 1. Prétraitement intelligent
-    text = re.sub(r'([.;])\s+', r'\1\n', text)  # Crée des sauts de ligne après ponctuation
-    doc = nlp_model(text)
+    # 1. Nettoyage initial du texte
+    text = re.sub(r'\s+', ' ', text)  # Unifie les espaces
     
-    # 2. Extraction des règles candidates
-    rule_candidates = set()
-    
-    # 3. Analyse phrase par phrase avec découpage
-    for sent in doc.sents:
-        # Découpage des phrases complexes
-        sub_sentences = split_complex_sentence(sent.text)
+    # 2. Motifs regex essentiels (modifiables facilement)
+    patterns = [
+        # Conditionnelles
+        r"(Si|Lorsque|Quand|Dès que|En cas de)[^.,;:!?]+(alors|,? (doit|devra|il faut))[^.,;:!?]+[.,;]",
         
-        for sub_sent in sub_sentences:
-            # Validation et normalisation
-            normalized_rules = normalize_rule(sub_sent, nlp_model)
-            if normalized_rules:
-                rule_candidates.update(normalized_rules)
-    
-    # 4. Post-traitement et organisation
-    return organize_rules(rule_candidates)
-
-def split_complex_sentence(sentence):
-    """
-    Découpe une phrase complexe en unités simples
-    selon les conjonctions et signes de ponctuation
-    """
-    # Séparation par conjonctions
-    split_patterns = [
-        r'\s+(et|ou|mais|ainsi que|d\'une part|d\'autre part|,\s*)\s+',
-        r'\s*;\s*',
-        r'\s*\.\s*'
+        # Obligations directes
+        r"(Le|La|Les|L')\s+[^.,;:!?]+\s+(doit|devra|est tenu de|a pour obligation)[^.,;:!?]+[.,;]",
+        
+        # Interdictions
+        r"(Il est interdit|Interdiction|Ne pas|Ne doit pas|Il n'est pas permis)[^.,;:!?]+[.,;]",
+        
+        # Autorisations
+        r"(Peut|A le droit|Est autorisé|Peut éventuellement)[^.,;:!?]+[.,;]"
     ]
     
-    sub_sentences = [sentence]
-    for pattern in split_patterns:
-        new_sub = []
-        for sent in sub_sentences:
-            parts = re.split(pattern, sent, flags=re.IGNORECASE)
-            # Garde seulement les parties significatives
-            new_sub.extend(p for p in parts if p and len(p.split()) > 3)
-        sub_sentences = new_sub
+    # 3. Extraction et formatage minimal
+    rules = set()
+    for pattern in patterns:
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+        for match in matches:
+            rule = format_simple_rule(match.group())
+            rules.add(rule)
     
-    return [s.strip() for s in sub_sentences if s.strip()]
+    # 4. Découpage des règles multiples (ex: "Doit A et doit B")
+    split_rules = set()
+    for rule in rules:
+        for sub_rule in split_compound_rule(rule):
+            split_rules.add(sub_rule)
+    
+    return sorted(split_rules, key=lambda x: len(x), reverse=True)
 
-def normalize_rule(rule_text, nlp_model):
-    """
-    Normalise une règle selon un modèle standard :
-    "Condition → Action → Conséquence"
-    """
-    doc = nlp_model(rule_text)
-    normalized_rules = set()
+def format_simple_rule(rule_text):
+    """Formatage minimal mais cohérent"""
+    # 1. Nettoie la ponctuation
+    rule_text = re.sub(r'[.,;]$', '', rule_text.strip())
     
-    # Structure conditionnelle
-    conditional_markers = ["si", "lorsque", "quand", "dès que"]
-    action_markers = ["doit", "devra", "nécessite", "obligatoire"]
+    # 2. Capitalisation et point final
+    rule_text = rule_text[0].upper() + rule_text[1:]
+    if not rule_text.endswith('.'):
+        rule_text += '.'
     
-    # Vérifie si c'est une règle valide
-    if not is_valid_rule(doc):
-        return normalized_rules
+    # 3. Espaces avant ponctuation
+    rule_text = re.sub(r'\s+([,;])', r'\1', rule_text)
     
-    # Découpage des règles composites
-    if any(marker in rule_text.lower() for marker in conditional_markers):
-        # Format: "Si [condition], alors [action]"
-        parts = re.split(r',\s*(alors|donc|par conséquent)\s*', rule_text, flags=re.IGNORECASE)
-        if len(parts) >= 3:
-            condition = parts[0]
-            action = ' '.join(parts[2:])
-            normalized_rules.add(f"Si {clean_segment(condition)}, alors {clean_segment(action)}.")
-    else:
-        # Format: "[Sujet] doit [action]"
-        normalized_rules.add(standardize_structure(rule_text))
-    
-    return normalized_rules
+    return rule_text
 
-def is_valid_rule(doc):
-    """
-    Valide qu'une phrase est bien une règle métier selon :
-    - Structure grammaticale
-    - Termes spécifiques
-    - Longueur minimale
-    """
-    min_words = 5
-    max_words = 30
-    required_pos = ["VERB", "NOUN"]
+def split_compound_rule(rule_text):
+    """Découpe les règles composites en unités simples"""
+    # Séparation sur les conjonctions
+    parts = re.split(r'\s+(et|ou|mais)\s+', rule_text, flags=re.IGNORECASE)
     
-    # Filtre par longueur
-    if len(doc) < min_words or len(doc) > max_words:
-        return False
-    
-    # Vérifie la présence de verbes et noms
-    has_required_pos = any(token.pos_ in required_pos for token in doc)
-    if not has_required_pos:
-        return False
-    
-    # Vérifie les termes réglementaires
-    rule_keywords = ["doit", "obligatoire", "interdit", "autorise", "requis"]
-    if not any(token.text.lower() in rule_keywords for token in doc):
-        return False
-    
-    return True
-
-def standardize_structure(text):
-    """
-    Applique une structure standard aux règles simples :
-    "[Sujet] [verbe modal] [action]"
-    """
-    # Normalisation des verbes modaux
-    replacements = {
-        r"est tenu de": "doit",
-        r"a l'obligation de": "doit",
-        r"n'est pas autorisé à": "ne peut pas",
-        r"est dans l'obligation de": "doit"
-    }
-    
-    for pattern, repl in replacements.items():
-        text = re.sub(pattern, repl, text, flags=re.IGNORECASE)
-    
-    # Capitalisation et ponctuation
-    text = text.capitalize()
-    if not text.endswith('.'):
-        text += '.'
-    
-    return text
-
-def organize_rules(rules):
-    """
-    Organise les règles par :
-    1. Type (conditionnelle, obligation...)
-    2. Longueur (des plus précises aux plus générales)
-    3. Cohérence thématique
-    """
-    # Classement initial par pertinence
-    sorted_rules = sorted(rules, key=lambda x: (
-        -len(x),  # Les plus longues d'abord (supposées plus complètes)
-        x.lower()  # Ordre alphabétique secondaire
-    ))
-    
-    # Regroupement intelligent
-    organized = []
-    current_category = None
-    
-    for rule in sorted_rules:
-        # Détection de la catégorie
-        rule_lower = rule.lower()
-        if any(kw in rule_lower for kw in ["si ", "lorsque"]):
-            category = "RÈGLES CONDITIONNELLES"
-        elif any(kw in rule_lower for kw in ["doit", "obligatoire"]):
-            category = "OBLIGATIONS"
-        elif any(kw in rule_lower for kw in ["interdit", "ne peut pas"]):
-            category = "INTERDICTIONS"
-        elif any(kw in rule_lower for kw in ["peut", "autorisé"]):
-            category = "AUTORISATIONS"
-        else:
-            category = "RÈGLES DIVERSES"
-        
-        # Ajout d'un séparateur si changement de catégorie
-        if category != current_category:
-            organized.append(f"\n=== {category} ===\n")
-            current_category = category
-        
-        organized.append(f"• {rule}")
-    
-    return organized
+    # Garde seulement les parties valides
+    return [p for p in parts if p and len(p.split()) >= 4 and p not in ['et', 'ou', 'mais']]
 
 
 
@@ -603,38 +495,29 @@ with tab3:
 #                     st.warning("Aucune règle de gestion n'a été identifiée dans le document")
 
 with tab4:
-    st.header("📋 Règles de Gestion Structurées")
+    st.header("Règles de Gestion (version simple)")
     
     if 'text' not in st.session_state:
-        st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
+        st.warning("Veuillez d'abord extraire un texte")
     else:
-        nlp_model = load_nlp_model()
-        if st.button("🔍 Extraire les règles (version structurée)"):
-            with st.spinner("Analyse syntaxique approfondie en cours..."):
-                rules = extract_business_rules(st.session_state.text, nlp_model)
+        if st.button("Extraire les règles"):
+            rules = extract_business_rules(st.session_state.text)
+            
+            if rules:
+                st.success(f"{len(rules)} règles trouvées !")
                 
-                if rules:
-                    st.session_state.organized_rules = rules
-                    st.success(f"✅ {len([r for r in rules if not r.startswith('\n===')])} règles structurées identifiées")
-                    
-                    # Affichage avec expanders par catégorie
-                    for line in rules:
-                        if line.startswith('\n==='):
-                            category = line.strip('=\n ')
-                            with st.expander(f"**{category}**", expanded=True):
-                                continue
-                        else:
-                            st.markdown(line)
-                    
-                    # Export amélioré
-                    st.download_button(
-                        label="📥 Télécharger le rapport complet",
-                        data="\n".join(rules),
-                        file_name="regles_gestion_structurées.txt",
-                        mime="text/plain"
-                    )
-                else:
-                    st.warning("Aucune règle valide n'a été identifiée dans le document")
+                # Affichage propre avec numérotation
+                for i, rule in enumerate(rules, 1):
+                    st.markdown(f"{i}. **{rule}**")
+                
+                # Export basique
+                st.download_button(
+                    "Télécharger les règles",
+                    "\n".join(f"- {r}" for r in rules),
+                    file_name="regles_metier.txt"
+                )
+            else:
+                st.warning("Aucune règle identifiée")
 
 
 with tab5:
