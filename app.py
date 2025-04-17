@@ -410,7 +410,7 @@ with tab5:
         
         # Section 2: Génération des PDC
         st.subheader("2. Génération des PDC")
-        
+        nlp_model = load_nlp_model()
         if has_pdc.startswith("Non") or (has_pdc.startswith("Oui") and pdc_file):
             if st.button("Générer/Compléter les PDC", type="primary"):
                 with st.spinner("Création des PDC..."):
