@@ -22,15 +22,37 @@ st.set_page_config(page_title="Génération automatique des Cas de test", layout
 # ----------------------------
 
 
+# @st.cache_resource
+# def load_nlp_model():
+#     """Charge le modèle spaCy pour le traitement NLP"""
+#     try:
+#         nlp = spacy.load("fr_core_news_md")
+#         return nlp
+#     except Exception as e:
+#         st.error(f"Erreur de chargement du modèle NLP: {str(e)}")
+#         st.info("Veuillez installer le modèle français avec: python -m spacy download fr_core_news_md")
+#         return None
 @st.cache_resource
 def load_nlp_model():
     """Charge le modèle spaCy pour le traitement NLP"""
     try:
+        # Essaye de charger le modèle normalement
         nlp = spacy.load("fr_core_news_md")
+        st.success("Modèle NLP chargé avec succès !")
         return nlp
+    except OSError:
+        try:
+            # Si le modèle n'est pas trouvé, propose l'installation
+            st.error("Modèle français non trouvé. Installation en cours...")
+            import os
+            os.system("python -m spacy download fr_core_news_md")
+            nlp = spacy.load("fr_core_news_md")
+            return nlp
+        except Exception as e:
+            st.error(f"Échec du chargement : {str(e)}")
+            return None
     except Exception as e:
-        st.error(f"Erreur de chargement du modèle NLP: {str(e)}")
-        st.info("Veuillez installer le modèle français avec: python -m spacy download fr_core_news_md")
+        st.error(f"Erreur inattendue : {str(e)}")
         return None
 
 
