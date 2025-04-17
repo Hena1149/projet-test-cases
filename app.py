@@ -33,6 +33,7 @@ def load_nlp_model():
         st.info("Veuillez installer le modèle français avec: python -m spacy download fr_core_news_md")
         return None
 
+
 def extract_business_rules(text, nlp_model):
     """
     Extrait les règles métier du texte en utilisant une combinaison de motifs regex et d'analyse NLP
@@ -66,26 +67,13 @@ def extract_business_rules(text, nlp_model):
     
     return sorted(rules, key=lambda x: len(x), reverse=True)
 
+
 def clean_rule(rule_text):
     """Nettoie et formate une règle de gestion"""
     rule_text = re.sub(r"\s+", " ", rule_text).strip()
     if not rule_text.endswith('.'):
         rule_text += '.'
     return rule_text
-
-
-def create_pdc_document(pdc_list):
-    """Crée un document Word à partir des PDC"""
-    from docx import Document  # Solution alternative si vous ne pouvez pas ajouter l'import global
-    doc = Document()
-    doc.add_heading('Points de Contrôle (PDC)', level=1)
-    for i, pdc in enumerate(pdc_list, 1):
-        p = doc.add_paragraph(style='ListBullet')
-        p.add_run(f"{i}. {pdc}").bold = True
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
 
 
 def extract_text(uploaded_file):
@@ -109,6 +97,21 @@ def extract_text(uploaded_file):
         st.error(f"Erreur d'extraction : {str(e)}")
         return None
 
+
+def create_pdc_document(pdc_list):
+    """Crée un document Word à partir des PDC"""
+    from docx import Document  # Solution alternative si vous ne pouvez pas ajouter l'import global
+    doc = Document()
+    doc.add_heading('Points de Contrôle (PDC)', level=1)
+    for i, pdc in enumerate(pdc_list, 1):
+        p = doc.add_paragraph(style='ListBullet')
+        p.add_run(f"{i}. {pdc}").bold = True
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
 def clean_text(text):
     """Nettoyage basique du texte"""
     text = text.lower()
@@ -120,6 +123,7 @@ def calculate_frequencies(text):
     """Calcule les fréquences des mots"""
     words = [word for word in text.split() if len(word) > 2]  # Filtre mots courts
     return pd.Series(words).value_counts()
+
 
 def generate_wordcloud(freq_dict, width=800, height=400, background_color="white", colormap="viridis"):
     """Génère un nuage de mots"""
@@ -171,12 +175,14 @@ def generate_pdc_from_rule(rule):
     action = verbs[0] if verbs else "vérifier"
     return f"{action.capitalize()} que {rule}"
 
+
 def compare_rules_pdc(rules, pdc_list):
     """Compare les règles avec les PDC existants"""
     vectorizer = TfidfVectorizer()
     tfidf_matrix = vectorizer.fit_transform(rules + pdc_list)
     similarity = cosine_similarity(tfidf_matrix[:len(rules)], tfidf_matrix[len(rules):])
     return similarity
+
 
 def create_test_case(pdc, index, is_manual=False):
     """Crée un cas de test à partir d'un PDC"""
@@ -193,6 +199,7 @@ def create_test_case(pdc, index, is_manual=False):
         "Étapes": f"1. Préparer l'environnement\n2. Exécuter: {pdc}\n3. Vérifier le résultat",
         "Résultat attendu": f"{pdc} est correctement implémenté"
     }
+
 
 def create_pdc_document(pdc_list):
     """Crée un document Word à partir des PDC"""
