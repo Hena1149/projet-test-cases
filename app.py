@@ -56,38 +56,155 @@ def load_nlp_model():
         return None
 
 
+# def extract_business_rules(text, nlp_model):
+#     """
+#     Extrait les règles métier du texte en utilisant une combinaison de motifs regex et d'analyse NLP
+#     """
+#     # Motifs regex pour les règles communes
+#     patterns = [
+#         r"(Si|Lorsqu’|Quand|Dès que|En cas de).*?(alors|doit|devra|est tenu de|nécessite|implique|entraîne|peut).*?\.",
+#         r"(Tout utilisateur|L’[a-zA-Z]+|Un client|Le système|Une demande).*?(doit|est tenu de|devra|ne peut pas|ne doit pas|est interdit de).*?\.",
+#         r"(Le non-respect|Toute infraction|Une violation).*?(entraîne|provoque|peut entraîner|résulte en|sera soumis à).*?\.",
+#         r"(L’utilisateur|Le client|Le prestataire|L’agent|Le système).*?(est autorisé à|peut|a le droit de).*?\."
+#     ]
+    
+#     rules = set()
+    
+#     # Extraction par motifs regex
+#     for pattern in patterns:
+#         matches = re.finditer(pattern, text, re.IGNORECASE)
+#         for match in matches:
+#             rules.add(clean_rule(match.group()))
+    
+#     # Extraction NLP si le modèle est disponible
+#     if nlp_model:
+#         doc = nlp_model(text)
+#         for sent in doc.sents:
+#             # Détection des phrases contenant des termes réglementaires
+#             if any(keyword in sent.text.lower() for keyword in ["si ", "alors", "doit", "est tenu de", "ne peut pas", "entraîne", "provoque",
+#             "peut entraîner", "doit être", "est obligatoire", "a le droit de", "est autorisé à"]):
+#                 # Filtrage des phrases trop courtes
+#                 if len(sent.text.split()) > 5:
+#                     rules.add(clean_rule(sent.text))
+    
+#     return sorted(rules, key=lambda x: len(x), reverse=True)
+
+
 def extract_business_rules(text, nlp_model):
     """
-    Extrait les règles métier du texte en utilisant une combinaison de motifs regex et d'analyse NLP
+    Extrait les règles métier avec une analyse approfondie utilisant :
+    - Des motifs regex avancés
+    - L'analyse syntaxique (dépendances)
+    - La détection des constructions conditionnelles
+    - Le regroupement thématique
     """
-    # Motifs regex pour les règles communes
-    patterns = [
-        r"(Si|Lorsqu’|Quand|Dès que|En cas de).*?(alors|doit|devra|est tenu de|nécessite|implique|entraîne|peut).*?\.",
-        r"(Tout utilisateur|L’[a-zA-Z]+|Un client|Le système|Une demande).*?(doit|est tenu de|devra|ne peut pas|ne doit pas|est interdit de).*?\.",
-        r"(Le non-respect|Toute infraction|Une violation).*?(entraîne|provoque|peut entraîner|résulte en|sera soumis à).*?\.",
-        r"(L’utilisateur|Le client|Le prestataire|L’agent|Le système).*?(est autorisé à|peut|a le droit de).*?\."
-    ]
+    if not text or not nlp_model:
+        return []
+
+    # 1. Pré-traitement du texte
+    text = preprocess_text(text)
+    doc = nlp_model(text)
     
+    # 2. Ensemble pour éviter les doublons
     rules = set()
     
-    # Extraction par motifs regex
-    for pattern in patterns:
-        matches = re.finditer(pattern, text, re.IGNORECASE)
+    # 3. Motifs regex avancés (ajout de nombreux nouveaux patterns)
+    advanced_patterns = [
+        # Conditionnelles complètes
+        r"(Si|Lorsque|Quand|Dès que|En cas de|Dans le cas où)\s+(.*?)\s*,\s*(alors|il est|on doit|le système doit|vous devez)\s+(.*?)(?=[.;])",
+        
+        # Obligations
+        r"(Le|La|Les)\s+([a-zA-ZÀ-ÿ0-9_]+)\s+(doit|devra|est tenu de|a l'obligation de|nécessite)\s+(.*?)(?=[.;])",
+        
+        # Interdictions
+        r"(Il est interdit|Interdiction|Ne pas|Ne doit pas|N'est pas autorisé)\s+(de|d'|à)\s+(.*?)(?=[.;])",
+        
+        # Droits/autorisations
+        r"(Peut|A le droit|Est autorisé|A la possibilité)\s+(de|d'|à)\s+(.*?)(?=[.;])",
+        
+        # Conséquences
+        r"(En cas de|En cas|Si non-respect)\s+(.*?)\s*,\s*(sera|entraîne|provoque|donne lieu à)\s+(.*?)(?=[.;])",
+        
+        # Règles temporelles
+        r"(Avant|Après|Dans un délai de)\s+(.*?)\s*,\s*(il faut|vous devez|le système)\s+(.*?)(?=[.;])"
+    ]
+    
+    # 4. Extraction par motifs regex avancés
+    for pattern in advanced_patterns:
+        matches = re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE)
         for match in matches:
-            rules.add(clean_rule(match.group()))
+            full_rule = match.group().strip()
+            if len(full_rule.split()) > 4:  # Filtre les phrases trop courtes
+                rules.add(format_rule(full_rule))
+
+    # 5. Analyse syntaxique approfondie avec spaCy
+    for sent in doc.sents:
+        # Détection des constructions conditionnelles
+        conditional_keywords = ["si", "lorsque", "quand", "dès que", "en cas"]
+        obligation_keywords = ["doit", "obligatoire", "requis", "nécessaire", "exigé"]
+        
+        # Vérifie la structure de la phrase
+        has_conditional = any(token.text.lower() in conditional_keywords for token in sent)
+        has_obligation = any(token.text.lower() in obligation_keywords for token in sent)
+        has_action = any(token.dep_ in ["ROOT", "xcomp"] for token in sent)
+        
+        # Règles de qualité pour la sélection
+        if (has_conditional or has_obligation) and has_action and len(sent.text.split()) > 6:
+            rules.add(format_rule(sent.text))
+            
+        # Détection des verbes modaux
+        for token in sent:
+            if token.dep_ == "aux" and token.head.pos_ == "VERB":
+                rule_candidate = f"{token.text.capitalize()} {token.head.text} {sent[token.head.i+1:].text}"
+                rules.add(format_rule(rule_candidate))
+
+    # 6. Post-traitement et organisation des règles
+    organized_rules = organize_rules(rules)
     
-    # Extraction NLP si le modèle est disponible
-    if nlp_model:
-        doc = nlp_model(text)
-        for sent in doc.sents:
-            # Détection des phrases contenant des termes réglementaires
-            if any(keyword in sent.text.lower() for keyword in ["si ", "alors", "doit", "est tenu de", "ne peut pas", "entraîne", "provoque",
-            "peut entraîner", "doit être", "est obligatoire", "a le droit de", "est autorisé à"]):
-                # Filtrage des phrases trop courtes
-                if len(sent.text.split()) > 5:
-                    rules.add(clean_rule(sent.text))
+    return organized_rules
+
+def preprocess_text(text):
+    """Nettoyage initial du texte"""
+    text = re.sub(r"\s+", " ", text)  # Espaces multiples
+    text = re.sub(r"(\w)-\s", r"\1", text)  # Césures
+    return text.strip()
+
+def format_rule(rule_text):
+    """Formate une règle pour une meilleure lisibilité"""
+    rule_text = re.sub(r"\s+", " ", rule_text).strip()
+    rule_text = rule_text.capitalize()
     
-    return sorted(rules, key=lambda x: len(x), reverse=True)
+    # Supprime les espaces avant ponctuation
+    rule_text = re.sub(r"\s+([.,;:])", r"\1", rule_text)
+    
+    # Ajoute un point si manquant
+    if not rule_text.endswith(('.', '!', '?')):
+        rule_text += '.'
+        
+    return rule_text
+
+def organize_rules(rules):
+    """Organise les règles par catégories"""
+    # Classement par longueur (les plus complètes d'abord)
+    sorted_rules = sorted(rules, key=lambda x: len(x), reverse=True)
+    
+    # Regroupement thématique (optionnel)
+    categorized_rules = {
+        "Conditionnelles": [r for r in sorted_rules if any(kw in r.lower() for kw in ["si ", "lorsque", "quand"])],
+        "Obligations": [r for r in sorted_rules if any(kw in r.lower() for kw in ["doit", "obligation", "requis"])],
+        "Interdictions": [r for r in sorted_rules if any(kw in r.lower() for kw in ["interdit", "ne pas", "interdiction"])],
+        "Autorisations": [r for r in sorted_rules if any(kw in r.lower() for kw in ["peut", "autorisé", "droit"])],
+        "Autres": [r for r in sorted_rules if not any(kw in r.lower() for kw in ["si ", "doit", "interdit", "peut"])]
+    }
+    
+    # Retourne une liste plate mais organisée
+    organized = []
+    for category, rule_list in categorized_rules.items():
+        if rule_list:
+            organized.append(f"\n=== {category.upper()} ===")
+            organized.extend(rule_list)
+    
+    return organized if organized else sorted_rules
 
 
 def clean_rule(rule_text):
@@ -374,55 +491,89 @@ with tab3:
                 mime="image/png"
             )
             
+# with tab4:
+#     st.header("Extraction des Règles de Gestion")
+#     nlp_model = load_nlp_model()
+    
+#     if 'text' not in st.session_state:
+#         st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
+#     elif not nlp_model:
+#         st.error("Le traitement NLP n'est pas disponible")
+#     else:
+#         if st.button("Extraire les règles", type="primary"):
+#             with st.spinner("Analyse en cours (cela peut prendre quelques minutes)..."):
+#                 rules = extract_business_rules(st.session_state.text, nlp_model)
+                
+#                 if rules:
+#                     st.session_state.rules = rules
+#                     st.success(f"{len(rules)} règles identifiées !")
+                    
+#                     # Affichage paginé
+#                     st.subheader("Règles extraites")
+#                     items_per_page = 5
+#                     total_pages = (len(rules) + items_per_page - 1) // items_per_page
+                    
+#                     page = st.number_input("Page", 1, total_pages, 1, 
+#                                          help="Naviguez entre les pages de résultats")
+                    
+#                     start_idx = (page - 1) * items_per_page
+#                     end_idx = min(start_idx + items_per_page, len(rules))
+                    
+#                     for i in range(start_idx, end_idx):
+#                         st.markdown(f"**Règle {i+1}**")
+#                         st.info(rules[i])
+                    
+#                     # Export des résultats
+#                     st.subheader("Export des résultats")
+#                     docx_file = create_rules_document(rules)
+#                     st.download_button(
+#                         "📄 Télécharger au format Word",
+#                         data=docx_file,
+#                         file_name="regles_gestion.docx",
+#                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+#                     )
+                    
+#                     # Option d'analyse supplémentaire
+#                     with st.expander("Analyse avancée"):
+#                         st.metric("Nombre total de règles", len(rules))
+#                         avg_length = sum(len(rule.split()) for rule in rules) / len(rules)
+#                         st.metric("Longueur moyenne des règles", f"{avg_length:.1f} mots")
+#                 else:
+#                     st.warning("Aucune règle de gestion n'a été identifiée dans le document")
+
 with tab4:
-    st.header("Extraction des Règles de Gestion")
-    nlp_model = load_nlp_model()
+    st.header("Extraction avancée des Règles")
     
     if 'text' not in st.session_state:
-        st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
-    elif not nlp_model:
-        st.error("Le traitement NLP n'est pas disponible")
+        st.warning("Veuillez d'abord extraire un texte")
     else:
-        if st.button("Extraire les règles", type="primary"):
-            with st.spinner("Analyse en cours (cela peut prendre quelques minutes)..."):
+        nlp_model = load_nlp_model()
+        if st.button("Extraire les règles (version avancée)"):
+            with st.spinner("Analyse approfondie en cours..."):
                 rules = extract_business_rules(st.session_state.text, nlp_model)
                 
                 if rules:
                     st.session_state.rules = rules
-                    st.success(f"{len(rules)} règles identifiées !")
                     
-                    # Affichage paginé
-                    st.subheader("Règles extraites")
-                    items_per_page = 5
-                    total_pages = (len(rules) + items_per_page - 1) // items_per_page
+                    # Affichage avec onglets par catégorie
+                    tab_cond, tab_obl, tab_int, tab_aut, tab_other = st.tabs(
+                        ["Conditionnelles", "Obligations", "Interdictions", "Autorisations", "Autres"])
                     
-                    page = st.number_input("Page", 1, total_pages, 1, 
-                                         help="Naviguez entre les pages de résultats")
-                    
-                    start_idx = (page - 1) * items_per_page
-                    end_idx = min(start_idx + items_per_page, len(rules))
-                    
-                    for i in range(start_idx, end_idx):
-                        st.markdown(f"**Règle {i+1}**")
-                        st.info(rules[i])
-                    
-                    # Export des résultats
-                    st.subheader("Export des résultats")
-                    docx_file = create_rules_document(rules)
-                    st.download_button(
-                        "📄 Télécharger au format Word",
-                        data=docx_file,
-                        file_name="regles_gestion.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
-                    
-                    # Option d'analyse supplémentaire
-                    with st.expander("Analyse avancée"):
-                        st.metric("Nombre total de règles", len(rules))
-                        avg_length = sum(len(rule.split()) for rule in rules) / len(rules)
-                        st.metric("Longueur moyenne des règles", f"{avg_length:.1f} mots")
-                else:
-                    st.warning("Aucune règle de gestion n'a été identifiée dans le document")
+                    for rule in rules:
+                        if "===" in rule:  # Séparateur de catégorie
+                            continue
+                            
+                        # Ajoute à l'onglet approprié
+                        if any(kw in rule.lower() for kw in ["si ", "lorsque"]):
+                            with tab_cond: st.info(rule)
+                        elif any(kw in rule.lower() for kw in ["doit", "obligation"]):
+                            with tab_obl: st.warning(rule)
+                        elif any(kw in rule.lower() for kw in ["interdit", "ne pas"]):
+                            with tab_int: st.error(rule)
+                        elif any(kw in rule.lower() for kw in ["peut", "autorisé"]):
+                            with tab_aut: st.success(rule)
+                        else:
+                            with tab_other: st.write(rule)
 
 
 with tab5:
