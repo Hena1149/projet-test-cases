@@ -56,106 +56,38 @@ def load_nlp_model():
         return None
 
 
-# def extract_business_rules(text, nlp_model):
-#     """
-#     Extrait les règles métier du texte en utilisant une combinaison de motifs regex et d'analyse NLP
-#     """
-#     # Motifs regex pour les règles communes
-#     patterns = [
-#         r"(Si|Lorsqu’|Quand|Dès que|En cas de).*?(alors|doit|devra|est tenu de|nécessite|implique|entraîne|peut).*?\.",
-#         r"(Tout utilisateur|L’[a-zA-Z]+|Un client|Le système|Une demande).*?(doit|est tenu de|devra|ne peut pas|ne doit pas|est interdit de).*?\.",
-#         r"(Le non-respect|Toute infraction|Une violation).*?(entraîne|provoque|peut entraîner|résulte en|sera soumis à).*?\.",
-#         r"(L’utilisateur|Le client|Le prestataire|L’agent|Le système).*?(est autorisé à|peut|a le droit de).*?\."
-#     ]
-    
-#     rules = set()
-    
-#     # Extraction par motifs regex
-#     for pattern in patterns:
-#         matches = re.finditer(pattern, text, re.IGNORECASE)
-#         for match in matches:
-#             rules.add(clean_rule(match.group()))
-    
-#     # Extraction NLP si le modèle est disponible
-#     if nlp_model:
-#         doc = nlp_model(text)
-#         for sent in doc.sents:
-#             # Détection des phrases contenant des termes réglementaires
-#             if any(keyword in sent.text.lower() for keyword in ["si ", "alors", "doit", "est tenu de", "ne peut pas", "entraîne", "provoque",
-#             "peut entraîner", "doit être", "est obligatoire", "a le droit de", "est autorisé à"]):
-#                 # Filtrage des phrases trop courtes
-#                 if len(sent.text.split()) > 5:
-#                     rules.add(clean_rule(sent.text))
-    
-#     return sorted(rules, key=lambda x: len(x), reverse=True)
-
-
-def extract_business_rules(text):
+def extract_business_rules(text, nlp_model):
     """
-    Version simplifiée pour extraire les règles métier avec :
-    - Regex ciblés
-    - Formatage basique
-    - Découpage des phrases multiples
+    Extrait les règles métier du texte en utilisant une combinaison de motifs regex et d'analyse NLP
     """
-    if not text:
-        return []
-
-    # 1. Nettoyage initial du texte
-    text = re.sub(r'\s+', ' ', text)  # Unifie les espaces
-    
-    # 2. Motifs regex essentiels (modifiables facilement)
+    # Motifs regex pour les règles communes
     patterns = [
-        # Conditionnelles
-        r"(Si|Lorsque|Quand|Dès que|En cas de)[^.,;:!?]+(alors|,? (doit|devra|il faut))[^.,;:!?]+[.,;]",
-        
-        # Obligations directes
-        r"(Le|La|Les|L')\s+[^.,;:!?]+\s+(doit|devra|est tenu de|a pour obligation)[^.,;:!?]+[.,;]",
-        
-        # Interdictions
-        r"(Il est interdit|Interdiction|Ne pas|Ne doit pas|Il n'est pas permis)[^.,;:!?]+[.,;]",
-        
-        # Autorisations
-        r"(Peut|A le droit|Est autorisé|Peut éventuellement)[^.,;:!?]+[.,;]"
+        r"(Si|Lorsqu’|Quand|Dès que|En cas de).*?(alors|doit|devra|est tenu de|nécessite|implique|entraîne|peut).*?\.",
+        r"(Tout utilisateur|L’[a-zA-Z]+|Un client|Le système|Une demande).*?(doit|est tenu de|devra|ne peut pas|ne doit pas|est interdit de).*?\.",
+        r"(Le non-respect|Toute infraction|Une violation).*?(entraîne|provoque|peut entraîner|résulte en|sera soumis à).*?\.",
+        r"(L’utilisateur|Le client|Le prestataire|L’agent|Le système).*?(est autorisé à|peut|a le droit de).*?\."
     ]
     
-    # 3. Extraction et formatage minimal
     rules = set()
+    
+    # Extraction par motifs regex
     for pattern in patterns:
         matches = re.finditer(pattern, text, re.IGNORECASE)
         for match in matches:
-            rule = format_simple_rule(match.group())
-            rules.add(rule)
+            rules.add(clean_rule(match.group()))
     
-    # 4. Découpage des règles multiples (ex: "Doit A et doit B")
-    split_rules = set()
-    for rule in rules:
-        for sub_rule in split_compound_rule(rule):
-            split_rules.add(sub_rule)
+    # Extraction NLP si le modèle est disponible
+    if nlp_model:
+        doc = nlp_model(text)
+        for sent in doc.sents:
+            # Détection des phrases contenant des termes réglementaires
+            if any(keyword in sent.text.lower() for keyword in ["si ", "alors", "doit", "est tenu de", "ne peut pas", "entraîne", "provoque",
+            "peut entraîner", "doit être", "est obligatoire", "a le droit de", "est autorisé à"]):
+                # Filtrage des phrases trop courtes
+                if len(sent.text.split()) > 5:
+                    rules.add(clean_rule(sent.text))
     
-    return sorted(split_rules, key=lambda x: len(x), reverse=True)
-
-def format_simple_rule(rule_text):
-    """Formatage minimal mais cohérent"""
-    # 1. Nettoie la ponctuation
-    rule_text = re.sub(r'[.,;]$', '', rule_text.strip())
-    
-    # 2. Capitalisation et point final
-    rule_text = rule_text[0].upper() + rule_text[1:]
-    if not rule_text.endswith('.'):
-        rule_text += '.'
-    
-    # 3. Espaces avant ponctuation
-    rule_text = re.sub(r'\s+([,;])', r'\1', rule_text)
-    
-    return rule_text
-
-def split_compound_rule(rule_text):
-    """Découpe les règles composites en unités simples"""
-    # Séparation sur les conjonctions
-    parts = re.split(r'\s+(et|ou|mais)\s+', rule_text, flags=re.IGNORECASE)
-    
-    # Garde seulement les parties valides
-    return [p for p in parts if p and len(p.split()) >= 4 and p not in ['et', 'ou', 'mais']]
+    return sorted(rules, key=lambda x: len(x), reverse=True)
 
 
 
@@ -444,80 +376,55 @@ with tab3:
                 mime="image/png"
             )
             
-# with tab4:
-#     st.header("Extraction des Règles de Gestion")
-#     nlp_model = load_nlp_model()
-    
-#     if 'text' not in st.session_state:
-#         st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
-#     elif not nlp_model:
-#         st.error("Le traitement NLP n'est pas disponible")
-#     else:
-#         if st.button("Extraire les règles", type="primary"):
-#             with st.spinner("Analyse en cours (cela peut prendre quelques minutes)..."):
-#                 rules = extract_business_rules(st.session_state.text, nlp_model)
-                
-#                 if rules:
-#                     st.session_state.rules = rules
-#                     st.success(f"{len(rules)} règles identifiées !")
-                    
-#                     # Affichage paginé
-#                     st.subheader("Règles extraites")
-#                     items_per_page = 5
-#                     total_pages = (len(rules) + items_per_page - 1) // items_per_page
-                    
-#                     page = st.number_input("Page", 1, total_pages, 1, 
-#                                          help="Naviguez entre les pages de résultats")
-                    
-#                     start_idx = (page - 1) * items_per_page
-#                     end_idx = min(start_idx + items_per_page, len(rules))
-                    
-#                     for i in range(start_idx, end_idx):
-#                         st.markdown(f"**Règle {i+1}**")
-#                         st.info(rules[i])
-                    
-#                     # Export des résultats
-#                     st.subheader("Export des résultats")
-#                     docx_file = create_rules_document(rules)
-#                     st.download_button(
-#                         "📄 Télécharger au format Word",
-#                         data=docx_file,
-#                         file_name="regles_gestion.docx",
-#                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-#                     )
-                    
-#                     # Option d'analyse supplémentaire
-#                     with st.expander("Analyse avancée"):
-#                         st.metric("Nombre total de règles", len(rules))
-#                         avg_length = sum(len(rule.split()) for rule in rules) / len(rules)
-#                         st.metric("Longueur moyenne des règles", f"{avg_length:.1f} mots")
-#                 else:
-#                     st.warning("Aucune règle de gestion n'a été identifiée dans le document")
-
 with tab4:
-    st.header("Règles de Gestion (version simple)")
+    st.header("Extraction des Règles de Gestion")
+    nlp_model = load_nlp_model()
     
     if 'text' not in st.session_state:
-        st.warning("Veuillez d'abord extraire un texte")
+        st.warning("Veuillez d'abord extraire un texte dans l'onglet 'Extraction'")
+    elif not nlp_model:
+        st.error("Le traitement NLP n'est pas disponible")
     else:
-        if st.button("Extraire les règles"):
-            rules = extract_business_rules(st.session_state.text)
-            
-            if rules:
-                st.success(f"{len(rules)} règles trouvées !")
+        if st.button("Extraire les règles", type="primary"):
+            with st.spinner("Analyse en cours (cela peut prendre quelques minutes)..."):
+                rules = extract_business_rules(st.session_state.text, nlp_model)
                 
-                # Affichage propre avec numérotation
-                for i, rule in enumerate(rules, 1):
-                    st.markdown(f"{i}. **{rule}**")
-                
-                # Export basique
-                st.download_button(
-                    "Télécharger les règles",
-                    "\n".join(f"- {r}" for r in rules),
-                    file_name="regles_metier.txt"
-                )
-            else:
-                st.warning("Aucune règle identifiée")
+                if rules:
+                    st.session_state.rules = rules
+                    st.success(f"{len(rules)} règles identifiées !")
+                    
+                    # Affichage paginé
+                    st.subheader("Règles extraites")
+                    items_per_page = 5
+                    total_pages = (len(rules) + items_per_page - 1) // items_per_page
+                    
+                    page = st.number_input("Page", 1, total_pages, 1, 
+                                         help="Naviguez entre les pages de résultats")
+                    
+                    start_idx = (page - 1) * items_per_page
+                    end_idx = min(start_idx + items_per_page, len(rules))
+                    
+                    for i in range(start_idx, end_idx):
+                        st.markdown(f"**Règle {i+1}**")
+                        st.info(rules[i])
+                    
+                    # Export des résultats
+                    st.subheader("Export des résultats")
+                    docx_file = create_rules_document(rules)
+                    st.download_button(
+                        "📄 Télécharger au format Word",
+                        data=docx_file,
+                        file_name="regles_gestion.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                    
+                    # Option d'analyse supplémentaire
+                    with st.expander("Analyse avancée"):
+                        st.metric("Nombre total de règles", len(rules))
+                        avg_length = sum(len(rule.split()) for rule in rules) / len(rules)
+                        st.metric("Longueur moyenne des règles", f"{avg_length:.1f} mots")
+                else:
+                    st.warning("Aucune règle de gestion n'a été identifiée dans le document")
 
 
 with tab5:
